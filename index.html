@@ -108,6 +108,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--cyan);bo
 .penalty b{color:var(--crimson)}
 .rest{margin-top:14px;border:1px solid rgba(74,222,128,.35);background:rgba(74,222,128,.07);
   padding:13px;font-size:13.5px;color:#A8DFBC}
+.pend{margin-top:14px;border:1px solid var(--line);background:rgba(92,225,255,.05);
+  padding:13px;font-size:13.5px;color:var(--ink)}
+.pend b{color:var(--cyan)}
 
 /* stats */
 .stat{display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:11px;margin-bottom:11px}
@@ -263,7 +266,7 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
 var KEY='sistema.v1';
 var REPO='claudiobravo/sistema-datos';
 var FILE='registro.json';
-var INICIO='2026-08-13';           // antes de esta fecha no cuenta: montaje y pruebas
+var INICIO='2026-08-12';           // antes de esta fecha no cuenta: montaje y pruebas
 
 var PUERTAS=[
  {n:'Último día en Saba Clot',f:'2026-08-14',r:'E',roja:false},
@@ -432,6 +435,8 @@ function pintarHoy(){
   var av=document.getElementById('aviso');
   if(desc){
     av.innerHTML='<div class="rest">Día de descanso. La Misión Diaria se reduce a rellenar la fila y no hay penalización. Un sistema que te cobra por descansar es un sistema que acabas abandonando.</div>';
+  }else if(!d.tocado){
+    av.innerHTML='<div class="pend"><b>Misión pendiente.</b> El día está por delante. Rellena lo que vayas haciendo y las casillas se encienden solas.</div>';
   }else if(!misionCompleta(d)){
     av.innerHTML='<div class="penalty"><b>▼</b><span><b>Penalización activa.</b> Misión Diaria incompleta: <b>−30 EXP</b> y la racha vuelve a cero. Dos días seguidos y el Sistema recalibra el lunes.</span></div>';
   }else{
@@ -463,6 +468,10 @@ function pintarEstado(){
     var p=Math.max(0,Math.min(100,s[1]/s[2]*100));
     return '<div class="stat"><span class="l">'+s[0]+'</span><div class="st"><div class="sf" style="width:'+p+'%"></div></div><span class="v">'+Math.round(s[1])+' '+s[3]+'</span></div>';
   }).join('');
+  if(clavesValidas().length===0){
+    document.getElementById('stats').insertAdjacentHTML('beforeend',
+      '<p class="note">El Sistema arranca el <b>12 de agosto</b>. Todo lo de antes es montaje y pruebas: ni suma ni resta. Por eso está todo a cero.</p>');
+  }
   info();
 }
 
