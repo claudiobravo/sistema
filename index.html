@@ -57,8 +57,27 @@ h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--li
 .card{background:var(--panel);border:1px solid var(--line);padding:16px;
   clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
 
+/* sello del cazador: SVG, se dibuja solo y escala sin pixelarse */
+.sello{display:flex;justify-content:center;margin:2px 0 12px}
+.sello svg{width:min(64vw,224px);height:auto;overflow:visible}
+.hexF{fill:none;stroke:var(--rango,#5CE1FF);stroke-width:1.4;opacity:.5}
+.hexI{fill:rgba(10,21,36,.72);stroke:var(--line);stroke-width:1}
+.pista{fill:none;stroke:rgba(92,225,255,.13);stroke-width:7}
+.aro{fill:none;stroke:url(#gAro);stroke-width:7;stroke-linecap:round;
+  transform:rotate(-90deg);transform-origin:100px 100px;
+  transition:stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1);
+  filter:drop-shadow(0 0 5px rgba(92,225,255,.7))}
+.letra{fill:var(--rango,#5CE1FF);font-family:var(--display);font-size:76px;font-weight:700;
+  text-anchor:middle;letter-spacing:.03em;filter:drop-shadow(0 0 14px var(--rango,#5CE1FF))}
+.etq{fill:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:.34em;text-anchor:middle}
+.niv{fill:var(--bright);font-family:var(--mono);font-size:13px;letter-spacing:.2em;text-anchor:middle}
+.subsello{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);text-align:center;margin:0 0 16px}
+.subsello b{color:var(--gold);font-variant-numeric:tabular-nums}
+
 /* status */
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.grid.tres{grid-template-columns:repeat(3,1fr)}
 .cellbox{background:var(--panel);padding:13px 6px;text-align:center}
 .cellbox .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:6px}
 .cellbox .v{font-size:26px;line-height:1;color:var(--bright);font-variant-numeric:tabular-nums}
@@ -273,14 +292,32 @@ nav button.on .ic{filter:none;transform:scale(1.05)}
 <!-- ══ ESTADO ══ -->
 <section class="view" id="v-estado">
   <h2>Estado del Cazador</h2>
-  <div class="grid">
-    <div class="cellbox"><span class="k">Nivel</span><span class="v" id="sNivel">1</span></div>
-    <div class="cellbox"><span class="k">Rango</span><span class="v hi" id="sRango">E</span></div>
+
+  <div class="sello">
+    <svg id="sello" viewBox="0 0 200 200" role="img" aria-labelledby="selloTit">
+      <title id="selloTit">Sello del Cazador</title>
+      <defs>
+        <linearGradient id="gAro" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stop-color="#1B4B8F"/>
+          <stop offset="1" stop-color="#5CE1FF"/>
+        </linearGradient>
+      </defs>
+      <polygon class="hexF" points="100,4 183,52 183,148 100,196 17,148 17,52"/>
+      <polygon class="hexI" points="100,17 172,58 172,142 100,183 28,142 28,58"/>
+      <circle class="pista" cx="100" cy="100" r="74"/>
+      <circle id="selloAro" class="aro" cx="100" cy="100" r="74"/>
+      <text class="etq" x="100" y="60">RANGO</text>
+      <text id="selloRango" class="letra" x="100" y="125">E</text>
+      <text id="selloNivel" class="niv" x="100" y="152">NIVEL 1</text>
+    </svg>
+  </div>
+  <p class="subsello"><b><span id="sExp">0</span> / <span id="sNext">500</span></b> EXP al siguiente nivel</p>
+
+  <div class="grid tres">
     <div class="cellbox"><span class="k">Racha</span><span class="v" id="sRacha">0</span></div>
     <div class="cellbox"><span class="k">Días</span><span class="v" id="sDias">0</span></div>
+    <div class="cellbox"><span class="k">EXP total</span><span class="v hi" id="sExpTot">0</span></div>
   </div>
-  <div class="barhead"><span>Al siguiente nivel</span><b><span id="sExp">0</span> / <span id="sNext">500</span></b></div>
-  <div class="track"><div class="fill" id="sFill"></div></div>
 
   <h2>Estadísticas · 7 días</h2>
   <div class="card" id="stats"></div>
@@ -681,16 +718,29 @@ function pintarHoy(){
   pintarRojas();
 }
 
+// Cada rango con su color. El aro es la EXP; el color, quién eres.
+var COLOR_RANGO={E:'#66809A',D:'#5CE1FF',C:'#4ADE80',B:'#FFC53D',A:'#FF9B3D',S:'#FF4D5E'};
+var VUELTA=2*Math.PI*74;
+
+function pintarSello(n,r,dentro){
+  var svg=document.getElementById('sello');
+  if(!svg) return;
+  if(svg.style&&svg.style.setProperty) svg.style.setProperty('--rango',COLOR_RANGO[r]||'#5CE1FF');
+  document.getElementById('selloRango').textContent=r;
+  document.getElementById('selloNivel').textContent='NIVEL '+n;
+  var aro=document.getElementById('selloAro');
+  aro.setAttribute('stroke-dasharray',VUELTA.toFixed(1));
+  aro.setAttribute('stroke-dashoffset',(VUELTA*(1-Math.max(0,Math.min(1,dentro/500)))).toFixed(1));
+}
+
 function pintarEstado(){
-  var n=nivel(),tot=expTotal();
-  document.getElementById('sNivel').textContent=n;
-  document.getElementById('sRango').textContent=rango(n);
+  var n=nivel(),tot=expTotal(),dentro=Math.max(0,tot)%500;
+  pintarSello(n,rango(n),dentro);
   document.getElementById('sRacha').textContent=racha();
   document.getElementById('sDias').textContent=clavesValidas().length;
-  var dentro=Math.max(0,tot)%500;
+  document.getElementById('sExpTot').textContent=Math.max(0,tot);
   document.getElementById('sExp').textContent=dentro;
   document.getElementById('sNext').textContent=500;
-  document.getElementById('sFill').style.width=(dentro/500*100)+'%';
 
   var ks=clavesValidas().slice(-7).map(function(k){return S.dias[k];});
   var sum=function(f){return ks.reduce(function(a,d){return a+f(d);},0);};

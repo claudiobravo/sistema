@@ -5,7 +5,9 @@
 function El(id){
   return {
     id:id, value:'', textContent:'', innerHTML:'', className:'', tagName:'DIV',
-    style:{}, dataset:{}, files:null, checked:false,
+    style:{setProperty(){},removeProperty(){},getPropertyValue(){return ''}},
+    dataset:{}, files:null, checked:false,
+    setAttribute(){}, getAttribute(){return null}, removeAttribute(){},
     classList:{add(){},remove(){},toggle(){},contains(){return false}},
     addEventListener(t,f){ (this._h||(this._h={}))[t]=f; },
     insertAdjacentHTML(){}, click(){}, closest(){return null},
