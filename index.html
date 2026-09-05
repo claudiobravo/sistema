@@ -231,6 +231,8 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
     <p class="note">Se guarda solo en este móvil. Nunca sale de aquí salvo hacia GitHub. Repositorio: <b>claudiobravo/sistema-datos</b>.</p>
     <button class="btn" id="btnSync" type="button">Sincronizar ahora</button>
     <button class="btn ghost" id="btnExport" type="button">Descargar copia</button>
+    <button class="btn ghost" id="btnImport" type="button">Restaurar copia</button>
+    <input id="fileImport" type="file" accept="application/json,.json" hidden>
     <p class="note" id="syncInfo"></p>
   </div>
 </section>
@@ -360,46 +362,156 @@ function racha(){
 }
 
 // ── guardado + sync ───────────────────────────────────
-var tSave=null,tPush=null;
-function guardar(){
+// La conexión va y viene (tren, metro, Clot). Regla del Sistema: los datos
+// viven en localStorage y se reintenta solo hasta que GitHub los tenga.
+var tPush=null;
+var SYNC={activo:false,otra:false,intento:0,timer:null,error:''};
+var ESPERAS=[4000,8000,16000,32000,60000,120000,300000];
+
+function persistir(){
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
-  clearTimeout(tPush); tPush=setTimeout(push,2500);
+}
+function guardar(){
+  S.pendiente=true;
+  persistir();
+  clearTimeout(tPush); tPush=setTimeout(function(){sincronizar(false);},2500);
   marcarSync('pend','pendiente');
 }
 function marcarSync(cls,txt){
   var el=document.getElementById('sync');
   el.className='sync'+(cls?' '+cls:''); el.textContent=txt;
 }
+// Toda escritura deja hora: es lo que permite fusionar sin perder nada.
+function tocar(d){ d.tocado=true; d.ts=Date.now(); }
 
-function push(){
-  var tk=(S.cfg.token||'').trim();
-  if(!tk){marcarSync('','solo local');return;}
-  if(!navigator.onLine){marcarSync('pend','sin conexión');return;}
-  marcarSync('pend','subiendo…');
-  var url='https://api.github.com/repos/'+REPO+'/contents/'+FILE;
-  var cuerpo={dias:S.dias,meta:{actualizado:new Date().toISOString(),nivel:nivel(),rango:rango(nivel()),expTotal:expTotal(),racha:racha()}};
-  var b64=btoa(unescape(encodeURIComponent(JSON.stringify(cuerpo,null,2))));
-  fetch(url,{headers:{Authorization:'Bearer '+tk,Accept:'application/vnd.github+json'}})
-    .then(function(r){return r.ok?r.json():null;})
-    .then(function(j){
-      return fetch(url,{method:'PUT',
-        headers:{Authorization:'Bearer '+tk,Accept:'application/vnd.github+json','Content-Type':'application/json'},
-        body:JSON.stringify({message:'registro '+HOY,content:b64,sha:j?j.sha:undefined})});
-    })
-    .then(function(r){
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      S.sync.last=new Date().toISOString();
-      try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
-      marcarSync('ok','guardado');
-      info();
-    })
-    .catch(function(err){marcarSync('err','error');info(err.message);});
+// Un día vacío no debe pisar al que ya está en GitHub.
+function diaVacio(d){
+  if(!d) return true;
+  for(var k in d){
+    if(!Object.prototype.hasOwnProperty.call(d,k)) continue;
+    if(k==='ts') continue;
+    var v=d[k];
+    if(v!==''&&v!==null&&v!==undefined&&v!==false) return false;
+  }
+  return true;
+}
+function tsDe(d){return (d&&typeof d.ts==='number')?d.ts:0;}
+
+// Fusión día a día: gana el más reciente. Sin hora (datos viejos) gana el
+// local, salvo que esté vacío. Así un móvil nuevo se rellena desde GitHub
+// en lugar de borrarlo todo.
+function fundir(local,remoto){
+  var out={},k,l,r;
+  for(k in remoto){ if(Object.prototype.hasOwnProperty.call(remoto,k)) out[k]=remoto[k]; }
+  for(k in local){
+    if(!Object.prototype.hasOwnProperty.call(local,k)) continue;
+    l=local[k]; r=out[k];
+    if(r===undefined){ if(!diaVacio(l)) out[k]=l; continue; }
+    if(diaVacio(l)&&!diaVacio(r)) continue;
+    if(tsDe(l)>=tsDe(r)) out[k]=l;
+  }
+  return out;
 }
 
-function info(extra){
+// En el tren una petición se queda colgada en vez de fallar: hay que cortarla.
+function conTiempo(url,opts,ms){
+  var o={},k;
+  for(k in opts){ if(Object.prototype.hasOwnProperty.call(opts,k)) o[k]=opts[k]; }
+  if(typeof AbortController!=='undefined'){
+    var ctrl=new AbortController();
+    o.signal=ctrl.signal;
+    setTimeout(function(){try{ctrl.abort();}catch(e){}},ms||20000);
+  }
+  return fetch(url,o);
+}
+function cabeceras(tk){
+  return {Authorization:'Bearer '+tk,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+}
+
+function repintar(){
+  var a=document.activeElement;
+  var escribiendo=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT');
+  if(!escribiendo) cargarCampos();
+  pintarHoy(); pintarEstado();
+}
+
+// Leer GitHub, fusionar, y subir solo si hace falta.
+function sincronizar(manual){
+  var tk=(S.cfg.token||'').trim();
+  if(!tk){ marcarSync('','solo local'); return; }
+  if(SYNC.activo){ SYNC.otra=true; return; }
+  clearTimeout(SYNC.timer);
+  if(!navigator.onLine){ marcarSync('pend','sin conexión'); programar(); return; }
+
+  SYNC.activo=true;
+  marcarSync('pend',manual?'sincronizando…':'subiendo…');
+  var url='https://api.github.com/repos/'+REPO+'/contents/'+FILE;
+
+  conTiempo(url+'?t='+Date.now(),{headers:cabeceras(tk),cache:'no-store'},20000)
+    .then(function(r){
+      if(r.status===404) return null;                       // aún no existe el fichero
+      if(r.status===401||r.status===403) throw new Error('el token no vale (HTTP '+r.status+')');
+      if(!r.ok) throw new Error('lectura HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(j){
+      var sha=j?j.sha:undefined, remotos={};
+      if(j&&j.content){
+        try{
+          var obj=JSON.parse(decodeURIComponent(escape(atob(String(j.content).replace(/\s/g,'')))));
+          if(obj&&obj.dias) remotos=obj.dias;
+        }catch(e){ throw new Error('el registro de GitHub no se pudo leer'); }
+      }
+      var antes=JSON.stringify(S.dias);
+      S.dias=fundir(S.dias,remotos);
+      var ahora=JSON.stringify(S.dias);
+      if(antes!==ahora){ persistir(); repintar(); }
+      if(!S.pendiente && ahora===JSON.stringify(remotos)) return 'igual';
+
+      var cuerpo={dias:S.dias,meta:{actualizado:new Date().toISOString(),nivel:nivel(),rango:rango(nivel()),expTotal:expTotal(),racha:racha()}};
+      var b64=btoa(unescape(encodeURIComponent(JSON.stringify(cuerpo,null,2))));
+      var cab=cabeceras(tk); cab['Content-Type']='application/json';
+      return conTiempo(url,{method:'PUT',headers:cab,
+        body:JSON.stringify({message:'registro '+hoyISO(),content:b64,sha:sha})},20000)
+        .then(function(r){
+          if(r.status===409||r.status===422) throw new Error('alguien cambió el registro a la vez; se reintenta');
+          if(!r.ok) throw new Error('subida HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(j2){ if(j2&&j2.content&&j2.content.sha) S.sync.sha=j2.content.sha; return 'subido'; });
+    })
+    .then(function(res){
+      SYNC.activo=false; SYNC.intento=0; SYNC.error='';
+      S.pendiente=false; S.sync.last=new Date().toISOString(); persistir();
+      marcarSync('ok',res==='igual'?'al día':'guardado');
+      info();
+      if(SYNC.otra){ SYNC.otra=false; sincronizar(false); }
+    })
+    .catch(function(err){
+      SYNC.activo=false; SYNC.otra=false;
+      SYNC.error=(err&&err.message)||'se cortó la conexión';
+      programar();
+      info();
+    });
+}
+
+// Reintento con espera creciente: 4s, 8s, 16s… hasta 5 min.
+function programar(){
+  clearTimeout(SYNC.timer);
+  if(!S.pendiente && !SYNC.error) return;
+  var espera=ESPERAS[Math.min(SYNC.intento,ESPERAS.length-1)];
+  SYNC.intento++;
+  if(navigator.onLine) marcarSync('err','reintento en '+Math.round(espera/1000)+'s');
+  else marcarSync('pend','sin conexión');
+  SYNC.timer=setTimeout(function(){sincronizar(false);},espera);
+}
+
+function info(){
   var el=document.getElementById('syncInfo');
   var t=S.sync.last?('Última subida: '+new Date(S.sync.last).toLocaleString('es-ES')):'Todavía no se ha subido nada.';
-  el.innerHTML=t+(extra?'<br>'+extra:'');
+  if(S.pendiente) t+='<br>Hay cambios sin subir. El Sistema reintenta solo.';
+  if(SYNC.error) t+='<br>Último fallo: '+SYNC.error;
+  el.innerHTML=t;
 }
 
 // ── render ────────────────────────────────────────────
@@ -517,14 +629,14 @@ CAMPOS.forEach(function(id){
   var el=document.getElementById(id);
   if(!el)return;
   el.addEventListener('input',function(){
-    var d=dia(HOY); d[id]=el.value; d.tocado=true;
+    var d=dia(HOY); d[id]=el.value; tocar(d);
     guardar(); pintarHoy();
   });
   el.addEventListener('change',function(){pintarHoy();});
 });
 document.querySelectorAll('.tg[data-tg]').forEach(function(b){
   b.addEventListener('click',function(){
-    var d=dia(HOY); d[b.dataset.tg]=!d[b.dataset.tg]; d.tocado=true;
+    var d=dia(HOY); d[b.dataset.tg]=!d[b.dataset.tg]; tocar(d);
     b.classList.toggle('on',!!d[b.dataset.tg]);
     guardar(); pintarHoy();
   });
@@ -538,7 +650,7 @@ document.getElementById('filtros').addEventListener('click',function(e){
 var tok=document.getElementById('tok');
 tok.value=S.cfg.token||'';
 tok.addEventListener('input',function(){S.cfg.token=tok.value.trim();guardar();});
-document.getElementById('btnSync').addEventListener('click',push);
+document.getElementById('btnSync').addEventListener('click',function(){SYNC.intento=0;sincronizar(true);});
 document.getElementById('btnExport').addEventListener('click',function(){
   var blob=new Blob([JSON.stringify({dias:S.dias},null,2)],{type:'application/json'});
   var a=document.createElement('a');
@@ -557,10 +669,51 @@ document.querySelectorAll('nav button').forEach(function(b){
   });
 });
 
-window.addEventListener('online',push);
+// Restaurar una copia descargada: se funde, no se pisa.
+document.getElementById('btnImport').addEventListener('click',function(){
+  document.getElementById('fileImport').click();
+});
+document.getElementById('fileImport').addEventListener('change',function(){
+  var f=this.files&&this.files[0]; this.value='';
+  if(!f)return;
+  var fr=new FileReader();
+  fr.onload=function(){
+    try{
+      var obj=JSON.parse(fr.result);
+      var ds=(obj&&obj.dias)||obj;
+      if(!ds||typeof ds!=='object'||Array.isArray(ds)) throw new Error('formato');
+      S.dias=fundir(S.dias,ds);
+      guardar(); repintar();
+    }catch(e){ alert('Esa copia no se ha podido leer.'); }
+  };
+  fr.readAsText(f);
+});
+
+// El día no es una foto fija: si la app se queda abierta y cambia la fecha,
+// lo escrito tiene que caer en la fila correcta.
+function refrescarDia(){
+  var k=hoyISO();
+  if(k===HOY) return false;
+  HOY=k;
+  cargarCampos(); pintarHoy(); pintarEstado(); pintarPuertas();
+  return true;
+}
+setInterval(refrescarDia,60000);
+window.addEventListener('focus',refrescarDia);
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden) return;
+  refrescarDia();
+  if(S.pendiente||SYNC.error){ SYNC.intento=0; sincronizar(false); }
+});
+window.addEventListener('online',function(){ SYNC.intento=0; sincronizar(false); });
+window.addEventListener('offline',function(){
+  clearTimeout(SYNC.timer);
+  if(S.pendiente) marcarSync('pend','sin conexión');
+});
 
 cargarCampos(); pintarHoy(); pintarEstado(); pintarMisiones(); pintarPuertas();
-if(S.cfg.token) marcarSync('ok','listo'); else marcarSync('','solo local');
+if(S.cfg.token){ marcarSync('pend','comprobando…'); setTimeout(function(){sincronizar(false);},600); }
+else marcarSync('','solo local');
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 })();

@@ -1,6 +1,6 @@
 // Cachea la app para que funcione sin cobertura (Clot).
 // Los datos NO pasan por aquí: viven en localStorage y suben a GitHub.
-var CACHE = 'sistema-v1';
+var CACHE = 'sistema-v2';
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
