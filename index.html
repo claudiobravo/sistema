@@ -145,7 +145,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--cyan);bo
 .cd{font-family:var(--mono);font-size:10.5px;color:var(--dim);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .cd.soon{color:var(--crimson)}
 .row.red{background:linear-gradient(90deg,rgba(255,77,94,.11),var(--panel) 60%)}
+[hidden]{display:none!important}
 .row.sel{background:var(--panel2)}
+.row.hecha .nm{text-decoration:line-through;color:var(--dim)}
+.row.cerrada{opacity:.62}
+.row.perdida{background:linear-gradient(90deg,rgba(255,77,94,.16),var(--panel) 70%);opacity:1}
+.rk.hecha{border-color:var(--green);color:var(--green)}
+.cd.hecha{color:var(--green)}
+.cd.perdida{color:var(--crimson)}
+.aviso-roja{margin-top:14px;border:1px solid rgba(255,197,61,.45);
+  background:linear-gradient(180deg,rgba(255,197,61,.10),rgba(255,197,61,.02));
+  padding:13px;font-size:13.5px;color:#E8D6A8}
+.aviso-roja>b{color:var(--gold)}
+.aviso-roja.urg{border-color:rgba(255,77,94,.5);
+  background:linear-gradient(180deg,rgba(255,77,94,.12),rgba(255,77,94,.02));color:#E8B6BC}
+.aviso-roja.urg>b{color:var(--crimson)}
+.aviso-roja .pr{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.08)}
+.aviso-roja .pr .q{font-size:13.5px;color:var(--bright);line-height:1.3}
+.aviso-roja .pr .c{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;white-space:nowrap;color:var(--gold)}
+.aviso-roja.urg .pr .c{color:var(--crimson)}
 .row.hueco .nm{color:var(--dim)}
 .cd.pos{color:var(--green)} .cd.neg{color:var(--crimson)}
 .rk.ok{border-color:var(--cyan);color:var(--cyan)}
@@ -197,6 +217,7 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
   <div class="track"><div class="fill" id="expFill"></div></div>
 
   <div id="aviso"></div>
+  <div id="rojas"></div>
 
   <h2>Registro</h2>
   <div class="card">
@@ -275,8 +296,15 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
 <!-- ══ PUERTAS ══ -->
 <section class="view" id="v-puertas">
   <h2>Puertas</h2>
+  <div id="avisoPuertas"></div>
   <div class="list" id="puertas"></div>
-  <p class="note">Las <b>Puertas Rojas</b> tienen fecha puesta por otro. Si se cierran contigo fuera, no hay segunda oportunidad.</p>
+  <p class="note">Las <b>Puertas Rojas</b> tienen fecha puesta por otro. Si se cierran contigo fuera, no hay segunda oportunidad. Toca una Puerta para marcarla como <b>superada</b>.</p>
+
+  <div id="secCerradas" hidden>
+    <h2>Cerradas</h2>
+    <div class="list" id="puertasCerradas"></div>
+    <p class="note">Ya no se puede actuar sobre ellas, pero no se borran: el Sistema no esconde lo que se quedó atrás.</p>
+  </div>
 </section>
 
 </main>
@@ -337,9 +365,10 @@ var MISIONES=[
 ];
 
 // ── estado ────────────────────────────────────────────
-var S={dias:{},cfg:{token:''},sync:{sha:null,last:null}};
+var S={dias:{},puertas:{},cfg:{token:''},sync:{sha:null,last:null}};
 try{var raw=localStorage.getItem(KEY); if(raw){S=Object.assign(S,JSON.parse(raw));}}catch(e){}
-if(!S.dias)S.dias={}; if(!S.cfg)S.cfg={token:''}; if(!S.sync)S.sync={sha:null,last:null};
+if(!S.dias)S.dias={}; if(!S.puertas)S.puertas={};
+if(!S.cfg)S.cfg={token:''}; if(!S.sync)S.sync={sha:null,last:null};
 
 function isoDe(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function hoyISO(){return isoDe(new Date());}
@@ -452,6 +481,18 @@ function fundir(local,remoto){
   return out;
 }
 
+// Las puertas también se funden por hora. Desmarcar deja {superada:false},
+// no un hueco: si no, la marca volvería desde GitHub en la siguiente bajada.
+function fundirPuertas(local,remoto){
+  var out={},k;
+  for(k in remoto){ if(Object.prototype.hasOwnProperty.call(remoto,k)) out[k]=remoto[k]; }
+  for(k in local){
+    if(!Object.prototype.hasOwnProperty.call(local,k)) continue;
+    if(out[k]===undefined||tsDe(local[k])>=tsDe(out[k])) out[k]=local[k];
+  }
+  return out;
+}
+
 // En el tren una petición se queda colgada en vez de fallar: hay que cortarla.
 function conTiempo(url,opts,ms){
   var o={},k;
@@ -471,7 +512,7 @@ function repintar(){
   var a=document.activeElement;
   var escribiendo=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT');
   if(!escribiendo) cargarCampos();
-  pintarHoy(); pintarEstado();
+  pintarHoy(); pintarEstado(); pintarPuertas();
 }
 
 // Leer GitHub, fusionar, y subir solo si hace falta.
@@ -494,21 +535,23 @@ function sincronizar(manual){
       return r.json();
     })
     .then(function(j){
-      var sha=j?j.sha:undefined, remotos={};
+      var sha=j?j.sha:undefined, remotos={}, remotasP={};
       if(j&&j.content){
         try{
           var obj=JSON.parse(decodeURIComponent(escape(atob(String(j.content).replace(/\s/g,'')))));
           if(obj&&obj.dias) remotos=obj.dias;
+          if(obj&&obj.puertas) remotasP=obj.puertas;
         }catch(e){ throw new Error('el registro de GitHub no se pudo leer'); }
       }
       podar();
-      var antes=JSON.stringify(S.dias);
+      var antes=JSON.stringify([S.dias,S.puertas]);
       S.dias=fundir(S.dias,remotos);
-      var ahora=JSON.stringify(S.dias);
+      S.puertas=fundirPuertas(S.puertas,remotasP);
+      var ahora=JSON.stringify([S.dias,S.puertas]);
       if(antes!==ahora){ persistir(); repintar(); }
-      if(!S.pendiente && ahora===JSON.stringify(remotos)) return 'igual';
+      if(!S.pendiente && ahora===JSON.stringify([remotos,remotasP])) return 'igual';
 
-      var cuerpo={dias:S.dias,meta:{actualizado:new Date().toISOString(),nivel:nivel(),rango:rango(nivel()),expTotal:expTotal(),racha:racha()}};
+      var cuerpo={dias:S.dias,puertas:S.puertas,meta:{actualizado:new Date().toISOString(),nivel:nivel(),rango:rango(nivel()),expTotal:expTotal(),racha:racha()}};
       var b64=btoa(unescape(encodeURIComponent(JSON.stringify(cuerpo,null,2))));
       var cab=cabeceras(tk); cab['Content-Type']='application/json';
       return conTiempo(url,{method:'PUT',headers:cab,
@@ -615,6 +658,7 @@ function pintarHoy(){
   }else{
     av.innerHTML='';
   }
+  pintarRojas();
 }
 
 function pintarEstado(){
@@ -683,17 +727,64 @@ function pintarMisiones(){
   }).join('')||'<div class="row"><span class="rw"><span class="nm">Nada aquí.</span></span></div>';
 }
 
+function idPuerta(p){return p.f+'|'+p.n;}
+function puertaHecha(p){var r=S.puertas[idPuerta(p)];return !!(r&&r.superada);}
+function diasHasta(f){return Math.round((new Date(f+'T12:00')-new Date(HOY+'T12:00'))/86400000);}
+function fechaCorta(f){return new Date(f+'T12:00').toLocaleDateString('es-ES',{day:'numeric',month:'long'});}
+function cuenta(d){return d===0?'hoy':d===1?'mañana':d+' d';}
+
 function pintarPuertas(){
-  var hoy=new Date(HOY+'T12:00');
-  document.getElementById('puertas').innerHTML=PUERTAS.map(function(p){
-    var dias=Math.round((new Date(p.f+'T12:00')-hoy)/86400000);
-    if(dias<0)return '';
-    var cls=p.r==='S'?'s':p.r==='A'?'a':'';
-    return '<div class="row'+(p.roja?' red':'')+'"><span class="rk '+cls+'">'+p.r+'</span>'+
-      '<span class="rw"><span class="nm">'+p.n+'</span><span class="mt">'+(p.roja?'Puerta Roja · ':'')+
-      new Date(p.f+'T12:00').toLocaleDateString('es-ES',{day:'numeric',month:'long'})+'</span></span>'+
-      '<span class="cd'+(dias<=14?' soon':'')+'">'+dias+' d</span></div>';
-  }).join('');
+  var abiertas='',cerradas='',rojasPerdidas=0;
+  PUERTAS.forEach(function(p){
+    var d=diasHasta(p.f), hecha=puertaHecha(p), id=idPuerta(p);
+    var rango=p.r==='S'?'s':p.r==='A'?'a':'';
+    var pie=(p.roja?'Puerta Roja · ':'')+fechaCorta(p.f);
+    if(d>=0){
+      abiertas+='<div class="row'+(p.roja?' red':'')+(hecha?' hecha':'')+'" data-p="'+id+'">'+
+        '<span class="rk '+(hecha?'hecha':rango)+'">'+(hecha?'✓':p.r)+'</span>'+
+        '<span class="rw"><span class="nm">'+p.n+'</span><span class="mt">'+pie+'</span></span>'+
+        '<span class="cd'+(hecha?' hecha':(d<=14?' soon':''))+'">'+(hecha?'superada':cuenta(d))+'</span></div>';
+    }else{
+      // Una Puerta pasada ya no se puede cruzar, pero tampoco desaparece.
+      var fuera=(!hecha&&p.roja);
+      if(fuera) rojasPerdidas++;
+      cerradas+='<div class="row cerrada'+(fuera?' perdida':'')+(hecha?' hecha':'')+'" data-p="'+id+'">'+
+        '<span class="rk '+(hecha?'hecha':(fuera?'s':'off'))+'">'+(hecha?'✓':'×')+'</span>'+
+        '<span class="rw"><span class="nm">'+p.n+'</span><span class="mt">'+pie+'</span></span>'+
+        '<span class="cd'+(hecha?' hecha':(fuera?' perdida':''))+'">'+(hecha?'superada':'cerrada')+'</span></div>';
+    }
+  });
+  document.getElementById('puertas').innerHTML=abiertas||
+    '<div class="row"><span class="rw"><span class="nm">No queda ninguna Puerta abierta.</span></span></div>';
+  document.getElementById('puertasCerradas').innerHTML=cerradas;
+  document.getElementById('secCerradas').hidden=!cerradas;
+
+  var av=document.getElementById('avisoPuertas');
+  av.innerHTML=rojasPerdidas
+    ? '<div class="penalty"><b>▼</b><span><b>'+(rojasPerdidas===1
+        ?'Una Puerta Roja se cerró contigo fuera.'
+        :rojasPerdidas+' Puertas Rojas se cerraron contigo fuera.')+
+      '</b> Si en realidad la cruzaste, márcala abajo. Si no, el Sistema no la reabre.</span></div>'
+    : '';
+}
+
+// Las Puertas Rojas no esperan a que entres en su pestaña: a 14 días o menos
+// se plantan en la pantalla de Hoy.
+function pintarRojas(){
+  var el=document.getElementById('rojas');
+  var cerca=PUERTAS.filter(function(p){
+    if(!p.roja||puertaHecha(p)) return false;
+    var d=diasHasta(p.f); return d>=0&&d<=14;
+  }).sort(function(a,b){return a.f<b.f?-1:a.f>b.f?1:0;});
+  if(!cerca.length){ el.innerHTML=''; return; }
+  var urgente=diasHasta(cerca[0].f)<=3;
+  el.innerHTML='<div class="aviso-roja'+(urgente?' urg':'')+'">'+
+    '<b>'+(cerca.length>1?'Puertas Rojas a la vista.':'Puerta Roja a la vista.')+'</b> '+
+    'La fecha la puso otro. Si se cierra contigo fuera, no hay segunda oportunidad.'+
+    cerca.map(function(p){
+      return '<div class="pr"><span class="q">'+p.n+'</span>'+
+        '<span class="c">'+cuenta(diasHasta(p.f)).toUpperCase()+'</span></div>';
+    }).join('')+'</div>';
 }
 
 // ── enlaces de campos ─────────────────────────────────
@@ -734,6 +825,14 @@ document.getElementById('historial').addEventListener('click',function(e){
   seleccionar(r.dataset.dia);
   irA('hoy');
 });
+function alternarPuerta(e){
+  var r=e.target.closest('[data-p]'); if(!r) return;
+  var id=r.dataset.p;
+  S.puertas[id]={superada:!(S.puertas[id]&&S.puertas[id].superada),ts:Date.now()};
+  guardar(); pintarPuertas(); pintarHoy();
+}
+document.getElementById('puertas').addEventListener('click',alternarPuerta);
+document.getElementById('puertasCerradas').addEventListener('click',alternarPuerta);
 document.getElementById('filtros').addEventListener('click',function(e){
   var b=e.target.closest('[data-fd]'); if(!b)return;
   filtroActual=b.dataset.fd; pintarMisiones();
@@ -745,7 +844,7 @@ tok.value=S.cfg.token||'';
 tok.addEventListener('input',function(){S.cfg.token=tok.value.trim();guardar();});
 document.getElementById('btnSync').addEventListener('click',function(){SYNC.intento=0;sincronizar(true);});
 document.getElementById('btnExport').addEventListener('click',function(){
-  var blob=new Blob([JSON.stringify({dias:S.dias},null,2)],{type:'application/json'});
+  var blob=new Blob([JSON.stringify({dias:S.dias,puertas:S.puertas},null,2)],{type:'application/json'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='sistema-'+HOY+'.json'; a.click();
 });
@@ -776,6 +875,7 @@ document.getElementById('fileImport').addEventListener('change',function(){
       var ds=(obj&&obj.dias)||obj;
       if(!ds||typeof ds!=='object'||Array.isArray(ds)) throw new Error('formato');
       S.dias=fundir(S.dias,ds);
+      if(obj&&obj.puertas) S.puertas=fundirPuertas(S.puertas,obj.puertas);
       guardar(); repintar();
     }catch(e){ alert('Esa copia no se ha podido leer.'); }
   };
