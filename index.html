@@ -72,6 +72,18 @@ h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--li
   box-shadow:0 0 18px rgba(92,225,255,.7);transition:width .5s cubic-bezier(.2,.8,.2,1)}
 .fill.neg{background:linear-gradient(90deg,#7A1220,var(--crimson));box-shadow:0 0 18px rgba(255,77,94,.6)}
 
+/* selector de día */
+.daynav{display:flex;align-items:stretch;gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:14px}
+.daynav button{flex:none;background:var(--panel);border:0;color:var(--cyan);font-family:var(--mono);
+  font-size:15px;padding:0 18px;cursor:pointer}
+.daynav button:disabled{color:var(--dim);opacity:.3}
+.daynav .dn{flex:1;background:var(--panel);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:4px;padding:10px 6px;cursor:pointer}
+.daynav .dn .d{font-size:15px;color:var(--bright);letter-spacing:.05em;text-align:center}
+.daynav .dn .d::first-letter,#historial .nm::first-letter{text-transform:uppercase}
+.daynav .dn .e{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.daynav .dn .e.atras{color:var(--gold)}
+
 /* mission */
 .quests{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line)}
 .q{display:flex;align-items:center;gap:13px;padding:13px 14px;background:var(--panel)}
@@ -133,6 +145,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--cyan);bo
 .cd{font-family:var(--mono);font-size:10.5px;color:var(--dim);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .cd.soon{color:var(--crimson)}
 .row.red{background:linear-gradient(90deg,rgba(255,77,94,.11),var(--panel) 60%)}
+.row.sel{background:var(--panel2)}
+.row.hueco .nm{color:var(--dim)}
+.cd.pos{color:var(--green)} .cd.neg{color:var(--crimson)}
+.rk.ok{border-color:var(--cyan);color:var(--cyan)}
+.rk.no{border-color:var(--crimson);color:var(--crimson)}
+.rk.off{border-color:var(--line);color:var(--dim)}
 
 .filters{display:flex;gap:7px;overflow-x:auto;padding-bottom:10px;margin-bottom:2px;-webkit-overflow-scrolling:touch}
 .filters .tg{white-space:nowrap;flex:none;font-size:10px;padding:8px 11px}
@@ -167,10 +185,15 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
 
 <!-- ══ HOY ══ -->
 <section class="view on" id="v-hoy">
-  <h2>Misión diaria · <span id="fechaTxt"></span></h2>
+  <h2>Misión diaria</h2>
+  <div class="daynav">
+    <button id="diaPrev" type="button" aria-label="Día anterior">◀</button>
+    <div class="dn" id="diaVolver"><span class="d" id="fechaTxt"></span><span class="e" id="diaEtiq">hoy</span></div>
+    <button id="diaNext" type="button" aria-label="Día siguiente">▶</button>
+  </div>
   <div class="quests" id="quests"></div>
 
-  <div class="barhead"><span>EXP de hoy</span><b><span id="expNum">0</span> / 200</b></div>
+  <div class="barhead"><span>EXP del día</span><b><span id="expNum">0</span> / 200</b></div>
   <div class="track"><div class="fill" id="expFill"></div></div>
 
   <div id="aviso"></div>
@@ -221,6 +244,10 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
 
   <h2>Estadísticas · 7 días</h2>
   <div class="card" id="stats"></div>
+
+  <h2>Historial</h2>
+  <div class="list" id="historial"></div>
+  <p class="note">Toca cualquier día para abrirlo y rellenarlo. Un día sin cobertura no es un día perdido: se apunta después y cuenta igual.</p>
 
   <h2>Sincronización</h2>
   <div class="card">
@@ -314,9 +341,13 @@ var S={dias:{},cfg:{token:''},sync:{sha:null,last:null}};
 try{var raw=localStorage.getItem(KEY); if(raw){S=Object.assign(S,JSON.parse(raw));}}catch(e){}
 if(!S.dias)S.dias={}; if(!S.cfg)S.cfg={token:''}; if(!S.sync)S.sync={sha:null,last:null};
 
-function hoyISO(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function isoDe(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function hoyISO(){return isoDe(new Date());}
+function sumarDias(k,n){var d=new Date(k+'T12:00');d.setDate(d.getDate()+n);return isoDe(d);}
+function fechaLarga(k){return new Date(k+'T12:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});}
 function dia(k){if(!S.dias[k])S.dias[k]={};return S.dias[k];}
 var HOY=hoyISO();
+var DIA=HOY;   // el día que se está editando. Por defecto hoy, pero se puede ir atrás.
 
 function num(v){var n=parseFloat(v);return isNaN(n)?0:n;}
 function esDescanso(d){return d.tipo==='Vacaciones'||d.tipo==='Descanso';}
@@ -351,7 +382,7 @@ function rango(n){return n>=80?'S':n>=55?'A':n>=35?'B':n>=20?'C':n>=10?'D':'E';}
 function racha(){
   var n=0,d=new Date();
   for(var i=0;i<400;i++){
-    var k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    var k=isoDe(d);
     if(k<INICIO)break;
     var reg=S.dias[k];
     if(reg&&misionCompleta(reg))n++;
@@ -368,7 +399,15 @@ var tPush=null;
 var SYNC={activo:false,otra:false,intento:0,timer:null,error:''};
 var ESPERAS=[4000,8000,16000,32000,60000,120000,300000];
 
+// Pasear por el historial crea fichas vacías. No deben guardarse ni subir.
+function podar(){
+  for(var k in S.dias){
+    if(!Object.prototype.hasOwnProperty.call(S.dias,k)) continue;
+    if(k!==DIA && diaVacio(S.dias[k])) delete S.dias[k];
+  }
+}
 function persistir(){
+  podar();
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
 }
 function guardar(){
@@ -462,6 +501,7 @@ function sincronizar(manual){
           if(obj&&obj.dias) remotos=obj.dias;
         }catch(e){ throw new Error('el registro de GitHub no se pudo leer'); }
       }
+      podar();
       var antes=JSON.stringify(S.dias);
       S.dias=fundir(S.dias,remotos);
       var ahora=JSON.stringify(S.dias);
@@ -523,9 +563,28 @@ var QS=[
  {k:'tocado',t:'Rellenar la fila del día',ok:function(d){return !!d.tocado;},n:function(){return ''}}
 ];
 
+function pintarDiaNav(){
+  document.getElementById('fechaTxt').textContent=fechaLarga(DIA);
+  var atras=(DIA!==HOY), et=document.getElementById('diaEtiq');
+  et.textContent=atras?'▲ volver a hoy':'hoy';
+  et.className='e'+(atras?' atras':'');
+  document.getElementById('diaNext').disabled=(DIA>=HOY);
+  document.getElementById('diaPrev').disabled=(sumarDias(DIA,-1)<INICIO);
+}
+
+// Abrir otro día: no se puede ir al futuro ni antes del arranque del Sistema.
+function seleccionar(k){
+  if(k>HOY)k=HOY;
+  if(k<INICIO)k=INICIO;
+  var previo=DIA;
+  DIA=k;
+  if(previo!==k && diaVacio(S.dias[previo])) delete S.dias[previo];
+  cargarCampos(); pintarHoy(); pintarEstado();
+}
+
 function pintarHoy(){
-  var d=dia(HOY);
-  document.getElementById('fechaTxt').textContent=new Date(HOY+'T12:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});
+  var d=dia(DIA);
+  pintarDiaNav();
 
   var desc=esDescanso(d);
   var html='';
@@ -548,7 +607,9 @@ function pintarHoy(){
   if(desc){
     av.innerHTML='<div class="rest">Día de descanso. La Misión Diaria se reduce a rellenar la fila y no hay penalización. Un sistema que te cobra por descansar es un sistema que acabas abandonando.</div>';
   }else if(!d.tocado){
-    av.innerHTML='<div class="pend"><b>Misión pendiente.</b> El día está por delante. Rellena lo que vayas haciendo y las casillas se encienden solas.</div>';
+    av.innerHTML=(DIA===HOY)
+      ? '<div class="pend"><b>Misión pendiente.</b> El día está por delante. Rellena lo que vayas haciendo y las casillas se encienden solas.</div>'
+      : '<div class="pend"><b>Día sin registrar.</b> Apunta lo que hicieras. Cuenta exactamente igual que si lo hubieras rellenado ese día.</div>';
   }else if(!misionCompleta(d)){
     av.innerHTML='<div class="penalty"><b>▼</b><span><b>Penalización activa.</b> Misión Diaria incompleta: <b>−30 EXP</b> y la racha vuelve a cero. Dos días seguidos y el Sistema recalibra el lunes.</span></div>';
   }else{
@@ -580,11 +641,33 @@ function pintarEstado(){
     var p=Math.max(0,Math.min(100,s[1]/s[2]*100));
     return '<div class="stat"><span class="l">'+s[0]+'</span><div class="st"><div class="sf" style="width:'+p+'%"></div></div><span class="v">'+Math.round(s[1])+' '+s[3]+'</span></div>';
   }).join('');
+  pintarHistorial();
   if(clavesValidas().length===0){
     document.getElementById('stats').insertAdjacentHTML('beforeend',
       '<p class="note">El Sistema arranca el <b>12 de agosto</b>. Todo lo de antes es montaje y pruebas: ni suma ni resta. Por eso está todo a cero.</p>');
   }
   info();
+}
+
+// Historial: los últimos 60 días desde el arranque, huecos incluidos.
+function pintarHistorial(){
+  var el=document.getElementById('historial');
+  if(!el) return;
+  var filas=[],k=HOY,n=0,d,reg,e,estado,cls,marca;
+  while(n<60 && k>=INICIO){
+    d=S.dias[k]; reg=!!(d&&d.tocado); e=reg?exp(d):0;
+    if(!reg){ estado='Sin registrar'; cls='off'; marca='—'; }
+    else if(esDescanso(d)){ estado='Descanso'; cls='off'; marca='·'; }
+    else if(misionCompleta(d)){ estado='Misión completa'; cls='ok'; marca='✓'; }
+    else { estado='Incompleta'; cls='no'; marca='▼'; }
+    filas.push('<div class="row'+(reg?'':' hueco')+(k===DIA?' sel':'')+'" data-dia="'+k+'">'+
+      '<span class="rk '+cls+'">'+marca+'</span>'+
+      '<span class="rw"><span class="nm">'+fechaLarga(k)+'</span>'+
+      '<span class="mt">'+estado+(k===HOY?' · hoy':'')+'</span></span>'+
+      '<span class="cd'+(reg?(e<0?' neg':' pos'):'')+'">'+(reg?((e>0?'+':'')+e+' EXP'):'—')+'</span></div>');
+    k=sumarDias(k,-1); n++;
+  }
+  el.innerHTML=filas.join('')||'<div class="row"><span class="rw"><span class="nm">Nada todavía.</span></span></div>';
 }
 
 var filtroActual='Todas';
@@ -616,10 +699,12 @@ function pintarPuertas(){
 // ── enlaces de campos ─────────────────────────────────
 var CAMPOS=['tipo','estudio','cuerpo','clips','listados','euros','ventasTk','peso','sueno','comida','energia','nota'];
 function cargarCampos(){
-  var d=dia(HOY);
+  var d=dia(DIA);
   CAMPOS.forEach(function(id){
     var el=document.getElementById(id);
-    if(el && d[id]!==undefined && d[id]!==null) el.value=d[id];
+    if(!el) return;
+    // vaciar lo que el día abierto no tenga: si no, se arrastra del anterior
+    el.value=(d[id]!==undefined&&d[id]!==null)?d[id]:'';
   });
   document.querySelectorAll('.tg[data-tg]').forEach(function(b){
     b.classList.toggle('on',!!d[b.dataset.tg]);
@@ -629,17 +714,25 @@ CAMPOS.forEach(function(id){
   var el=document.getElementById(id);
   if(!el)return;
   el.addEventListener('input',function(){
-    var d=dia(HOY); d[id]=el.value; tocar(d);
+    var d=dia(DIA); d[id]=el.value; tocar(d);
     guardar(); pintarHoy();
   });
   el.addEventListener('change',function(){pintarHoy();});
 });
 document.querySelectorAll('.tg[data-tg]').forEach(function(b){
   b.addEventListener('click',function(){
-    var d=dia(HOY); d[b.dataset.tg]=!d[b.dataset.tg]; tocar(d);
+    var d=dia(DIA); d[b.dataset.tg]=!d[b.dataset.tg]; tocar(d);
     b.classList.toggle('on',!!d[b.dataset.tg]);
     guardar(); pintarHoy();
   });
+});
+document.getElementById('diaPrev').addEventListener('click',function(){seleccionar(sumarDias(DIA,-1));});
+document.getElementById('diaNext').addEventListener('click',function(){seleccionar(sumarDias(DIA,1));});
+document.getElementById('diaVolver').addEventListener('click',function(){if(DIA!==HOY)seleccionar(HOY);});
+document.getElementById('historial').addEventListener('click',function(e){
+  var r=e.target.closest('[data-dia]'); if(!r)return;
+  seleccionar(r.dataset.dia);
+  irA('hoy');
 });
 document.getElementById('filtros').addEventListener('click',function(e){
   var b=e.target.closest('[data-fd]'); if(!b)return;
@@ -658,15 +751,15 @@ document.getElementById('btnExport').addEventListener('click',function(){
 });
 
 // nav
+function irA(v){
+  document.querySelectorAll('nav button').forEach(function(x){x.classList.toggle('on',x.dataset.v===v);});
+  document.querySelectorAll('.view').forEach(function(x){x.classList.remove('on');});
+  document.getElementById('v-'+v).classList.add('on');
+  if(v==='estado')pintarEstado();
+  window.scrollTo(0,0);
+}
 document.querySelectorAll('nav button').forEach(function(b){
-  b.addEventListener('click',function(){
-    document.querySelectorAll('nav button').forEach(function(x){x.classList.remove('on');});
-    document.querySelectorAll('.view').forEach(function(x){x.classList.remove('on');});
-    b.classList.add('on');
-    document.getElementById('v-'+b.dataset.v).classList.add('on');
-    if(b.dataset.v==='estado')pintarEstado();
-    window.scrollTo(0,0);
-  });
+  b.addEventListener('click',function(){irA(b.dataset.v);});
 });
 
 // Restaurar una copia descargada: se funde, no se pisa.
@@ -694,7 +787,9 @@ document.getElementById('fileImport').addEventListener('change',function(){
 function refrescarDia(){
   var k=hoyISO();
   if(k===HOY) return false;
+  var seguiaEnHoy=(DIA===HOY);
   HOY=k;
+  if(seguiaEnHoy) DIA=k;          // si estabas en un día pasado, ahí te quedas
   cargarCampos(); pintarHoy(); pintarEstado(); pintarPuertas();
   return true;
 }
