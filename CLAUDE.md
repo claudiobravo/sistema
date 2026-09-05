@@ -66,3 +66,31 @@ JavaScript de navegador, sin framework y sin transpilar: `var`, `function`,
 nada de `import`. Funciones cortas y compactas, a menudo en una línea. Todo en
 español: nombres de función (`pintarHoy`, `expTotal`, `esDescanso`), comentarios
 y textos de interfaz. Al añadir código, imita lo que ya hay alrededor.
+
+## Cómo explicar las cosas aquí
+
+Quien lleva este repo no programa. Construye la app con ayuda de Claude, casi
+siempre desde el móvil y a veces sin buena cobertura. Eso cambia cómo hay que
+responder:
+
+- **Sin jerga.** Rama, commit, push, hook, contenedor, PR: la primera vez que
+  uses una de esas palabras, explícala en la misma frase.
+- **Lo importante, primero.** Si algo no está activo, si falta un paso suyo o si
+  algo no se ha guardado, va en la primera línea. Nunca al final.
+- **Enseña el resultado, no el comando.** Nada de volcados de consola ni
+  interiores de scripts salvo que los pida.
+- **Comprueba antes de afirmar.** No digas "está guardado" o "está subido" sin
+  haberlo mirado.
+- **Distingue siempre** "esto ya funciona" de "esto funcionará cuando lo
+  juntemos en main". Es la confusión que más tiempo ha costado.
+- **Una decisión cada vez**, con tu recomendación por delante y las
+  consecuencias de cada opción en lenguaje llano.
+
+### Errores ya cometidos — no repetirlos
+
+- Afirmar que una rama estaba en GitHub sin comprobarlo. Era falso.
+- Decir que el proyecto no tiene pruebas: sí las tiene, en `pruebas/`.
+- Dar por sabido qué es una rama, un PR o "juntar en main".
+- Enterrar "esto todavía no está activo" al final de una respuesta larga.
+- Proponer partir `index.html` sin avisar de que eso choca de frente con
+  cualquier otra sesión que lo tenga abierto.
