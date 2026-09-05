@@ -19,7 +19,8 @@ var chk=U.chk, seccion=U.seccion;
       (await pg.inputValue('#estudio'))==='' && (await pg.inputValue('#clips'))==='',
       {estudio:await pg.inputValue('#estudio')});
   chk('el interruptor se apaga', !(await pg.getAttribute('.tg[data-tg="liquidacion"]','class')).includes('on'));
-  chk('avisa de que el día está sin registrar', (await pg.textContent('#aviso')).includes('Día sin registrar'));
+  chk('avisa de que el día está sin registrar',
+      (await pg.textContent('#aviso')).toLowerCase().includes('día sin registrar'));
   chk('ahora sí se puede avanzar', !(await pg.isDisabled('#diaNext')));
   chk('ofrece volver a hoy', (await pg.textContent('#diaEtiq')).includes('volver a hoy'));
 

@@ -68,9 +68,14 @@ h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--li
   letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:16px 0 7px}
 .barhead b{color:var(--gold);font-variant-numeric:tabular-nums}
 .track{height:14px;background:rgba(4,7,14,.9);border:1px solid var(--line);overflow:hidden}
-.fill{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));
+.fill{position:relative;overflow:hidden;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));
   box-shadow:0 0 18px rgba(92,225,255,.7);transition:width .5s cubic-bezier(.2,.8,.2,1)}
 .fill.neg{background:linear-gradient(90deg,#7A1220,var(--crimson));box-shadow:0 0 18px rgba(255,77,94,.6)}
+/* misión completa: la barra queda cargada y recorre un destello */
+.fill.full::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);
+  transform:translateX(-100%);animation:destello 2.4s ease-in-out infinite}
+@keyframes destello{0%{transform:translateX(-100%)}55%,100%{transform:translateX(180%)}}
 
 /* selector de día */
 .daynav{display:flex;align-items:stretch;gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:14px}
@@ -91,6 +96,7 @@ h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--li
   font-size:12px;font-weight:700;color:transparent;transition:.2s}
 .q.done .box{background:var(--cyan);border-color:var(--cyan);color:var(--void);box-shadow:0 0 14px rgba(92,225,255,.6)}
 .q.done .box::after{content:"✓"}
+.q .em{flex:none;font-size:17px;line-height:1;margin-right:-5px}
 .q .t{flex:1;font-size:15.5px;color:var(--bright)}
 .q.done .t{color:var(--dim);text-decoration:line-through;text-decoration-color:var(--cyan-dim)}
 .q .n{font-family:var(--mono);font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
@@ -160,6 +166,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--cyan);bo
 .aviso-roja.urg{border-color:rgba(255,77,94,.5);
   background:linear-gradient(180deg,rgba(255,77,94,.12),rgba(255,77,94,.02));color:#E8B6BC}
 .aviso-roja.urg>b{color:var(--crimson)}
+.aviso-roja.urg{animation:latido 1.9s ease-in-out infinite}
+@keyframes latido{
+  0%,100%{box-shadow:0 0 0 rgba(255,77,94,0);border-color:rgba(255,77,94,.5)}
+  50%{box-shadow:0 0 22px rgba(255,77,94,.32);border-color:rgba(255,77,94,.95)}
+}
 .aviso-roja .pr{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
   margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.08)}
 .aviso-roja .pr .q{font-size:13.5px;color:var(--bright);line-height:1.3}
@@ -183,6 +194,14 @@ nav button{background:none;border:0;padding:12px 4px 13px;font-family:var(--mono
   letter-spacing:.14em;text-transform:uppercase;color:var(--dim);cursor:pointer;
   border-top:2px solid transparent;margin-top:-1px}
 nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12px rgba(92,225,255,.6)}
+nav button .ic{display:block;font-size:17px;line-height:1;margin-bottom:4px;
+  filter:grayscale(.55) opacity(.65);transition:filter .2s}
+nav button.on .ic{filter:none;transform:scale(1.05)}
+
+/* Quien tenga el móvil en modo de movimiento reducido, sin animaciones. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
 
 .btn{display:block;width:100%;background:rgba(92,225,255,.1);border:1px solid var(--cyan);
   color:var(--cyan);font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
@@ -243,10 +262,10 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
     </div>
 
     <div class="toggles">
-      <button class="tg" data-tg="liquidacion" type="button">Acción liquidación</button>
-      <button class="tg" data-tg="entreno" type="button">Entreno</button>
-      <button class="tg" data-tg="misionPrincipal" type="button">Misión principal</button>
-      <button class="tg" data-tg="frenteAbierto" type="button">Frente abierto</button>
+      <button class="tg" data-tg="liquidacion" type="button">💰 Acción liquidación</button>
+      <button class="tg" data-tg="entreno" type="button">🏋️ Entreno</button>
+      <button class="tg" data-tg="misionPrincipal" type="button">🎯 Misión principal</button>
+      <button class="tg" data-tg="frenteAbierto" type="button">🛡️ Frente abierto</button>
     </div>
   </div>
 </section>
@@ -298,7 +317,7 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
   <h2>Puertas</h2>
   <div id="avisoPuertas"></div>
   <div class="list" id="puertas"></div>
-  <p class="note">Las <b>Puertas Rojas</b> tienen fecha puesta por otro. Si se cierran contigo fuera, no hay segunda oportunidad. Toca una Puerta para marcarla como <b>superada</b>.</p>
+  <p class="note">Las <b>PUERTAS ROJAS</b> tienen fecha puesta por otro. Si se cierran contigo fuera, no hay segunda oportunidad. Toca una Puerta para marcarla como <b>superada</b>.</p>
 
   <div id="secCerradas" hidden>
     <h2>Cerradas</h2>
@@ -310,10 +329,10 @@ nav button.on{color:var(--cyan);border-top-color:var(--cyan);text-shadow:0 0 12p
 </main>
 
 <nav>
-  <button class="on" data-v="hoy" type="button">Hoy</button>
-  <button data-v="estado" type="button">Estado</button>
-  <button data-v="misiones" type="button">Misiones</button>
-  <button data-v="puertas" type="button">Puertas</button>
+  <button class="on" data-v="hoy" type="button"><span class="ic">⚔️</span>Hoy</button>
+  <button data-v="estado" type="button"><span class="ic">📊</span>Estado</button>
+  <button data-v="misiones" type="button"><span class="ic">📋</span>Misiones</button>
+  <button data-v="puertas" type="button"><span class="ic">🚪</span>Puertas</button>
 </nav>
 
 <script>
@@ -599,11 +618,11 @@ function info(){
 
 // ── render ────────────────────────────────────────────
 var QS=[
- {k:'estudio',t:'30 minutos de estudio',ok:function(d){return num(d.estudio)>=30;},n:function(d){return num(d.estudio)+'/30'}},
- {k:'cuerpo',t:'10 minutos de cuerpo',ok:function(d){return num(d.cuerpo)>=10;},n:function(d){return num(d.cuerpo)+'/10'}},
- {k:'liquidacion',t:'Una acción de liquidación',ok:function(d){return !!d.liquidacion;},n:function(){return ''}},
- {k:'clips',t:'10 clips subidos',ok:function(d){return num(d.clips)>=10;},n:function(d){return num(d.clips)+'/10'}},
- {k:'tocado',t:'Rellenar la fila del día',ok:function(d){return !!d.tocado;},n:function(){return ''}}
+ {k:'estudio',e:'📖',t:'30 Minutos De Estudio',ok:function(d){return num(d.estudio)>=30;},n:function(d){return num(d.estudio)+'/30'}},
+ {k:'cuerpo',e:'💪',t:'10 Minutos De Cuerpo',ok:function(d){return num(d.cuerpo)>=10;},n:function(d){return num(d.cuerpo)+'/10'}},
+ {k:'liquidacion',e:'💰',t:'Una Acción De Liquidación',ok:function(d){return !!d.liquidacion;},n:function(){return ''}},
+ {k:'clips',e:'🎬',t:'10 Clips Subidos',ok:function(d){return num(d.clips)>=10;},n:function(d){return num(d.clips)+'/10'}},
+ {k:'tocado',e:'✍️',t:'Dejar Constancia Del Día',ok:function(d){return !!d.tocado;},n:function(){return ''}}
 ];
 
 function pintarDiaNav(){
@@ -632,10 +651,10 @@ function pintarHoy(){
   var desc=esDescanso(d);
   var html='';
   if(desc){
-    html='<div class="q'+(d.tocado?' done':'')+'"><span class="box"></span><span class="t">Rellenar la fila del día</span><span class="n">único requisito</span></div>';
+    html='<div class="q'+(d.tocado?' done':'')+'"><span class="box"></span><span class="em">✍️</span><span class="t">Dejar Constancia Del Día</span><span class="n">Único Requisito</span></div>';
   }else{
     QS.forEach(function(q){
-      html+='<div class="q'+(q.ok(d)?' done':'')+'"><span class="box"></span><span class="t">'+q.t+'</span><span class="n">'+q.n(d)+'</span></div>';
+      html+='<div class="q'+(q.ok(d)?' done':'')+'"><span class="box"></span><span class="em">'+q.e+'</span><span class="t">'+q.t+'</span><span class="n">'+q.n(d)+'</span></div>';
     });
   }
   document.getElementById('quests').innerHTML=html;
@@ -644,17 +663,18 @@ function pintarHoy(){
   document.getElementById('expNum').textContent=e;
   var f=document.getElementById('expFill');
   f.classList.toggle('neg',e<0);
+  f.classList.toggle('full',misionCompleta(d)&&!esDescanso(d));
   f.style.width=(e<0?100:Math.max(0,Math.min(100,e/200*100)))+'%';
 
   var av=document.getElementById('aviso');
   if(desc){
-    av.innerHTML='<div class="rest">Día de descanso. La Misión Diaria se reduce a rellenar la fila y no hay penalización. Un sistema que te cobra por descansar es un sistema que acabas abandonando.</div>';
+    av.innerHTML='<div class="rest">🌙 <b>Día De Descanso.</b> La Misión Diaria se reduce a dejar constancia y no hay penalización. Un sistema que te cobra por descansar es un sistema que acabas abandonando.</div>';
   }else if(!d.tocado){
     av.innerHTML=(DIA===HOY)
-      ? '<div class="pend"><b>Misión pendiente.</b> El día está por delante. Rellena lo que vayas haciendo y las casillas se encienden solas.</div>'
-      : '<div class="pend"><b>Día sin registrar.</b> Apunta lo que hicieras. Cuenta exactamente igual que si lo hubieras rellenado ese día.</div>';
+      ? '<div class="pend">⚔️ <b>Misión Pendiente.</b> El día está por delante. Rellena lo que vayas haciendo y las casillas se encienden solas.</div>'
+      : '<div class="pend">📝 <b>Día Sin Registrar.</b> Apunta lo que hicieras. Cuenta exactamente igual que si lo hubieras rellenado ese día.</div>';
   }else if(!misionCompleta(d)){
-    av.innerHTML='<div class="penalty"><b>▼</b><span><b>Penalización activa.</b> Misión Diaria incompleta: <b>−30 EXP</b> y la racha vuelve a cero. Dos días seguidos y el Sistema recalibra el lunes.</span></div>';
+    av.innerHTML='<div class="penalty"><b>⚠️</b><span><b>Penalización Activa.</b> Misión Diaria incompleta: <b>−30 EXP</b> y la racha vuelve a cero. Dos días seguidos y el Sistema recalibra el lunes.</span></div>';
   }else{
     av.innerHTML='';
   }
@@ -714,6 +734,7 @@ function pintarHistorial(){
   el.innerHTML=filas.join('')||'<div class="row"><span class="rw"><span class="nm">Nada todavía.</span></span></div>';
 }
 
+var ICONO={Estudios:'📖',Liquidación:'💰',Cuerpo:'💪',Contenido:'🎬',Admin:'📋',Mudanza:'✈️'};
 var filtroActual='Todas';
 function pintarMisiones(){
   var ds=['Todas','En cualquier sitio','Con cobertura','Sin cobertura','Solo Esplugues'];
@@ -723,7 +744,7 @@ function pintarMisiones(){
   var ms=MISIONES.filter(function(m){return filtroActual==='Todas'||m.d===filtroActual;});
   document.getElementById('misiones').innerHTML=ms.map(function(m){
     return '<div class="row"><span class="rk">'+m.r+'</span><span class="rw"><span class="nm">'+m.n+'</span>'+
-      '<span class="mt">'+m.fr+' · '+m.t+' · '+m.d+'</span></span><span class="cd">+'+m.x+'</span></div>';
+      '<span class="mt">'+(ICONO[m.fr]||'')+' '+m.fr+' · '+m.t+' · '+m.d+'</span></span><span class="cd">+'+m.x+'</span></div>';
   }).join('')||'<div class="row"><span class="rw"><span class="nm">Nada aquí.</span></span></div>';
 }
 
@@ -738,7 +759,7 @@ function pintarPuertas(){
   PUERTAS.forEach(function(p){
     var d=diasHasta(p.f), hecha=puertaHecha(p), id=idPuerta(p);
     var rango=p.r==='S'?'s':p.r==='A'?'a':'';
-    var pie=(p.roja?'Puerta Roja · ':'')+fechaCorta(p.f);
+    var pie=(p.roja?'🔴 PUERTA ROJA · ':'')+fechaCorta(p.f);
     if(d>=0){
       abiertas+='<div class="row'+(p.roja?' red':'')+(hecha?' hecha':'')+'" data-p="'+id+'">'+
         '<span class="rk '+(hecha?'hecha':rango)+'">'+(hecha?'✓':p.r)+'</span>'+
@@ -761,9 +782,9 @@ function pintarPuertas(){
 
   var av=document.getElementById('avisoPuertas');
   av.innerHTML=rojasPerdidas
-    ? '<div class="penalty"><b>▼</b><span><b>'+(rojasPerdidas===1
-        ?'Una Puerta Roja se cerró contigo fuera.'
-        :rojasPerdidas+' Puertas Rojas se cerraron contigo fuera.')+
+    ? '<div class="penalty"><b>⚠️</b><span><b>'+(rojasPerdidas===1
+        ?'Una PUERTA ROJA Se Cerró Contigo Fuera.'
+        :rojasPerdidas+' PUERTAS ROJAS Se Cerraron Contigo Fuera.')+
       '</b> Si en realidad la cruzaste, márcala abajo. Si no, el Sistema no la reabre.</span></div>'
     : '';
 }
@@ -776,15 +797,16 @@ function pintarRojas(){
     if(!p.roja||puertaHecha(p)) return false;
     var d=diasHasta(p.f); return d>=0&&d<=14;
   }).sort(function(a,b){return a.f<b.f?-1:a.f>b.f?1:0;});
-  if(!cerca.length){ el.innerHTML=''; return; }
+  if(!cerca.length){ if(el.innerHTML) el.innerHTML=''; return; }
   var urgente=diasHasta(cerca[0].f)<=3;
-  el.innerHTML='<div class="aviso-roja'+(urgente?' urg':'')+'">'+
-    '<b>'+(cerca.length>1?'Puertas Rojas a la vista.':'Puerta Roja a la vista.')+'</b> '+
+  var html='<div class="aviso-roja'+(urgente?' urg':'')+'">'+
+    '<b>🔴 '+(cerca.length>1?'PUERTAS ROJAS A LA VISTA.':'PUERTA ROJA A LA VISTA.')+'</b> '+
     'La fecha la puso otro. Si se cierra contigo fuera, no hay segunda oportunidad.'+
     cerca.map(function(p){
       return '<div class="pr"><span class="q">'+p.n+'</span>'+
         '<span class="c">'+cuenta(diasHasta(p.f)).toUpperCase()+'</span></div>';
     }).join('')+'</div>';
+  if(el.innerHTML!==html) el.innerHTML=html;   // si no, el latido se reinicia con cada tecla
 }
 
 // ── enlaces de campos ─────────────────────────────────

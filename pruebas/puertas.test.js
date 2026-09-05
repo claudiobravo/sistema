@@ -31,9 +31,9 @@ function dias(f){
   var s=await U.abrir(), pg=s.pg;
 
   seccion('Aviso de Puerta Roja en la pantalla de Hoy');
-  var aviso=await pg.textContent('#rojas');
+  var aviso=await pg.textContent('#rojas'), avisoBajo=aviso.toLowerCase();
   if(cerca.length){
-    chk('avisa', aviso.includes('Puerta Roja'), aviso.slice(0,50));
+    chk('avisa', avisoBajo.includes('puerta roja'), aviso.slice(0,50));
     chk('nombra las que vienen', cerca.every(function(p){return aviso.includes(p.n);}), cerca.map(function(p){return p.n;}));
     chk('una línea por Puerta', (await pg.$$eval('.aviso-roja .pr',function(n){return n.length;}))===cerca.length);
     chk('dice cuánto queda', (await pg.$$eval('.aviso-roja .pr .c',function(n){return n.map(function(x){return x.textContent;});}))
@@ -55,8 +55,10 @@ function dias(f){
   chk('las Rojas que se cerraron van marcadas',
       (await pg.$$eval('#puertasCerradas .row.perdida',function(n){return n.length;}))===perdidas.length);
   var avisoP=await pg.textContent('#avisoPuertas');
+  var avisoPBajo=avisoP.toLowerCase();
   chk('y se avisa de ellas', perdidas.length===0 ? avisoP.trim()==='' :
-      avisoP.includes(perdidas.length===1?'Una Puerta Roja se cerró':perdidas.length+' Puertas Rojas se cerraron'), avisoP);
+      avisoPBajo.includes(perdidas.length===1?'una puerta roja se cerró'
+                                             :perdidas.length+' puertas rojas se cerraron'), avisoP);
 
   if(perdidas.length){
     seccion('Marcar una como superada');
