@@ -70,7 +70,14 @@ class Ajustes(BaseSettings):
 
     # --- Comportamiento ---
     responder_en_grupo: bool = True
+    # Dos cosas muy distintas que antes iban en la misma variable:
+    #  - responder_ilegibles: "esto no parece una venta". En un grupo donde
+    #    ademas se habla, salta con cada mensaje normal y acaba siendo ruido.
+    #  - responder_errores: algo se ha ROTO (cuota agotada, gateway caido,
+    #    PDF corrupto). Es raro y hay que enterarse, o el bot deja de
+    #    registrar ventas en silencio.
     responder_errores: bool = True
+    responder_ilegibles: bool = True
     comandos_activos: bool = True
     cola_max: int = 200
     zona_horaria: str = "Europe/Madrid"

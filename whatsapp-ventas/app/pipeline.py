@@ -318,11 +318,13 @@ class Procesador:
                 creado=resultado.estado == "registrado",
                 zona=self.ajustes.zona_horaria,
             )
-        if not self.ajustes.responder_errores:
-            return None
         if resultado.estado == "ilegible":
+            if not self.ajustes.responder_ilegibles:
+                return None
             return formatting.mensaje_ilegible(resultado.motivo)
         if resultado.estado == "error":
+            if not self.ajustes.responder_errores:
+                return None
             return formatting.mensaje_error(resultado.motivo or "fallo desconocido")
         return None
 

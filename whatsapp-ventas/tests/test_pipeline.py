@@ -331,3 +331,39 @@ def test_resumen(procesador, gateway, proveedor):
     ejecutar(procesador.procesar(evento(mensaje_id="V2", texto="vendida por 25€")))
     ejecutar(procesador.procesar(evento(mensaje_id="C4", texto="/resumen")))
     assert "25,00 €" in gateway.ultimo
+
+
+def test_callar_los_no_es_venta_no_calla_los_fallos_de_verdad(almacen, gateway, proveedor, tmp_path):
+    """Son dos cosas distintas y antes las apagaba el mismo interruptor.
+
+    En un grupo donde además se habla, el aviso de "esto no parece una venta"
+    salta con cada mensaje y se vuelve ruido. Pero el aviso de que algo se ha
+    ROTO —la cuota agotada, el gateway caído— es justo el que no puede faltar:
+    sin él, el bot deja de registrar ventas y nadie se entera.
+    """
+    from app.config import Ajustes
+    from app.pipeline import Procesador
+
+    ajustes = Ajustes(
+        _env_file=None,
+        evolution_api_key="clave",
+        webhook_token="secreto",
+        grupo_ventas_jid=GRUPO,
+        anthropic_api_key="sk-test",
+        db_path=str(tmp_path / "v.db"),
+        responder_ilegibles=False,
+        responder_errores=True,
+    )
+    procesador = Procesador(ajustes, almacen, gateway, proveedor)
+
+    # Un mensaje que no es una venta: el bot se calla.
+    proveedor.respuestas.append(venta(legible=False, motivo_ilegible="no es una venta"))
+    resultado = ejecutar(procesador.procesar(evento(texto="jajaja qué bueno", mensaje_id="M1")))
+    assert resultado.estado == "ilegible"
+    assert gateway.enviados == []
+
+    # Pero si el proveedor revienta (p. ej. sin cuota), sí avisa.
+    proveedor.respuestas.append(ErrorLLM("429 RESOURCE_EXHAUSTED: quota"))
+    resultado = ejecutar(procesador.procesar(evento(texto="Vendida camiseta por 10€", mensaje_id="M2")))
+    assert resultado.estado == "error"
+    assert len(gateway.enviados) == 1
