@@ -41,7 +41,15 @@ services:
     networks: [interna]
 
   evolution-api:
-    image: atendai/evolution-api:v2.1.1
+    # Aqui ponia `atendai/evolution-api:v2.1.1` y NO se puede descargar: ese
+    # repositorio deniega el pull anonimo (medido el 07/09/2026 - la API de
+    # tags responde, pero el registro contesta "pull access denied ...
+    # repository does not exist", que es un mensaje enganoso: el problema es
+    # el permiso, no el nombre). El repo mantenido y descargable sin cuenta es
+    # `evoapicloud/evolution-api`. Version exacta a proposito: con `latest`
+    # una actualizacion del gateway cambiaria la forma de los payloads del
+    # webhook sin avisar y el bot dejaria de leer los adjuntos.
+    image: ${EVOLUTION_IMAGEN:-evoapicloud/evolution-api:v2.3.7}
     restart: unless-stopped
     depends_on:
       postgres:
