@@ -42,7 +42,11 @@ class Ajustes(BaseSettings):
 
     # Gemini / Ollama (alternativas self-hosted o de bajo coste)
     gemini_api_key: str = ""
-    gemini_modelo: str = "gemini-2.0-flash"
+    # gemini-2.0-flash estaba aqui y ya NO existe: la API de Google lo ha
+    # retirado (comprobado el 07/09/2026 contra el listado de modelos vivos).
+    # Habria fallado con 404 en cada mensaje. Version fija a proposito, no un
+    # alias tipo `gemini-flash-latest`: un alias cambia de modelo solo.
+    gemini_modelo: str = "gemini-2.5-flash"
     gemini_base_url: str = "https://generativelanguage.googleapis.com"
     ollama_base_url: str = "http://ollama:11434"
     ollama_modelo: str = "llama3.2-vision"
