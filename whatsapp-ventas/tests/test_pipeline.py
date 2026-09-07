@@ -25,6 +25,35 @@ def test_ignora_los_chats_que_no_son_el_grupo(procesador, gateway, proveedor):
     assert proveedor.entradas == []
 
 
+def test_con_el_jid_vacio_el_bot_no_escucha_nada(almacen, gateway, proveedor, tmp_path):
+    """Vacío significa sordo, nunca «escucha todo».
+
+    Es el valor por defecto del .env.example y el estado en el que se arranca
+    antes de saber el JID del grupo: si aquí se colara un «si no hay filtro,
+    pasa todo», el bot procesaría los chats privados del número secundario.
+    """
+    from app.config import Ajustes
+    from app.pipeline import Procesador
+
+    sin_grupo = Ajustes(
+        _env_file=None,
+        evolution_api_key="clave",
+        webhook_token="secreto",
+        grupo_ventas_jid="",
+        anthropic_api_key="sk-test",
+        db_path=str(tmp_path / "otra.db"),
+    )
+    assert sin_grupo.jids_permitidos == frozenset()
+    procesador_sordo = Procesador(sin_grupo, almacen, gateway, proveedor)
+    proveedor.respuestas.append(venta())
+
+    resultado = ejecutar(procesador_sordo.procesar(evento(texto="Vendida por 25€")))
+
+    assert resultado.estado == "ignorado"
+    assert gateway.enviados == []
+    assert proveedor.entradas == []
+
+
 def test_ignora_sus_propios_mensajes(procesador, gateway):
     resultado = ejecutar(procesador.procesar(evento(texto="✅ Venta registrada", de_mi=True)))
     assert resultado.estado == "ignorado"

@@ -159,17 +159,30 @@ def decodificar_base64(valor: str) -> bytes:
         raise ErrorGateway(f"base64 corrupto: {exc}") from exc
 
 
-def _desenvolver(mensaje: dict) -> dict:
-    """Quita las capas de mensajes efímeros / de una sola vez / con pie de foto."""
+def _capas(mensaje: dict) -> list[dict]:
+    """Devuelve el sobre y cada capa que envuelve al mensaje, de fuera hacia dentro.
+
+    Hace falta la lista entera, no solo el interior: Evolution engancha el
+    base64 del adjunto en el nivel donde venía el `message` del webhook, que
+    es el de FUERA. Si nos quedamos solo con el contenido desenvuelto (el caso
+    de una etiqueta PDF con pie de foto, `documentWithCaptionMessage`) el
+    base64 se queda atrás y hay que volver a pedir el fichero al gateway.
+    """
+    capas = [mensaje]
     for _ in range(5):
         for envoltorio in _ENVOLTORIOS:
-            interior = mensaje.get(envoltorio)
+            interior = capas[-1].get(envoltorio)
             if isinstance(interior, dict) and isinstance(interior.get("message"), dict):
-                mensaje = interior["message"]
+                capas.append(interior["message"])
                 break
         else:
             break
-    return mensaje
+    return capas
+
+
+def _desenvolver(mensaje: dict) -> dict:
+    """Quita las capas de mensajes efímeros / de una sola vez / con pie de foto."""
+    return _capas(mensaje)[-1]
 
 
 def parsear_mensaje(payload: dict) -> Optional[MensajeEntrante]:
@@ -194,7 +207,8 @@ def parsear_mensaje(payload: dict) -> Optional[MensajeEntrante]:
     if not chat_jid or not mensaje_id:
         return None
 
-    contenido = _desenvolver(datos.get("message") or {})
+    capas = _capas(datos.get("message") or {})
+    contenido = capas[-1]
 
     texto = (
         contenido.get("conversation")
@@ -208,7 +222,7 @@ def parsear_mensaje(payload: dict) -> Optional[MensajeEntrante]:
     documento = contenido.get("documentMessage") or {}
     adjunto = imagen or documento
 
-    b64 = _extraer_base64(datos, contenido, adjunto)
+    b64 = _extraer_base64(datos, capas, adjunto)
 
     return MensajeEntrante(
         mensaje_id=mensaje_id,
@@ -226,12 +240,21 @@ def parsear_mensaje(payload: dict) -> Optional[MensajeEntrante]:
     )
 
 
-def _extraer_base64(datos: dict, contenido: dict, adjunto: dict) -> str | None:
-    """El base64 embebido cambia de sitio según la versión y la config del webhook."""
-    candidatos = [contenido.get("base64"), datos.get("base64"), adjunto.get("base64")]
-    media = datos.get("media")
-    if isinstance(media, dict):
-        candidatos.append(media.get("base64"))
+def _extraer_base64(datos: dict, capas: list[dict], adjunto: dict) -> str | None:
+    """El base64 embebido cambia de sitio según la versión y la config del webhook.
+
+    Se miran TODAS las capas del mensaje, no solo la interior: con
+    `WEBHOOK_BASE64=true` Evolution lo cuelga del `message` de primer nivel, y
+    ese nivel desaparece en cuanto el mensaje viene envuelto (pie de foto,
+    efímero, ver una vez). Antes se perdía justo ahí y cada etiqueta con pie de
+    foto obligaba a una llamada extra a getBase64FromMediaMessage.
+    """
+    candidatos: list[Any] = [datos.get("base64"), adjunto.get("base64")]
+    candidatos.extend(capa.get("base64") for capa in capas)
+    for clave in ("media", "mediaMessage"):
+        anidado = datos.get(clave)
+        if isinstance(anidado, dict):
+            candidatos.append(anidado.get("base64"))
     for candidato in candidatos:
         if isinstance(candidato, str) and candidato.strip():
             return candidato

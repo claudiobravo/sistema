@@ -58,3 +58,34 @@ def test_mensajes_auxiliares():
     assert "borroso" in mensaje_ilegible("está borroso")
     assert "No hay ventas pendientes" in mensaje_pendientes([])
     assert "#7" in mensaje_pendientes([_registro()])
+
+
+def test_si_falta_la_base_de_zonas_se_avisa_en_el_log(caplog):
+    """El fallo era mudo: sin tzdata las horas salían en UTC y nadie se enteraba.
+
+    La hora sigue saliendo (no se tira el mensaje por esto), pero queda rastro.
+    """
+    from app import formatting
+
+    formatting._zona_horaria.cache_clear()
+    with caplog.at_level("WARNING"):
+        salida = formatting.formatear_fecha("2026-09-07T08:30:00+00:00", "Marte/Olympus")
+    assert salida == "07/09/2026 08:30"
+    assert "Marte/Olympus" in caplog.text
+    formatting._zona_horaria.cache_clear()
+
+
+def test_la_zona_se_resuelve_una_sola_vez():
+    from app import formatting
+
+    formatting._zona_horaria.cache_clear()
+    formatting.formatear_fecha("2026-09-07T08:30:00+00:00", "Europe/Madrid")
+    formatting.formatear_fecha("2026-09-08T08:30:00+00:00", "Europe/Madrid")
+    assert formatting._zona_horaria.cache_info().hits == 1
+
+
+def test_europe_madrid_esta_disponible_de_verdad():
+    """Guarda contra el bug real: si esto falla, faltan las zonas horarias."""
+    from app.formatting import _zona_horaria
+
+    assert _zona_horaria("Europe/Madrid") is not None

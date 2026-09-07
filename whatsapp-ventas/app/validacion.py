@@ -89,16 +89,28 @@ def normalizar_codigo(codigo: str | None) -> str:
     return _NO_ALFANUMERICO.sub("", codigo.upper())
 
 
-def detectar_transportista_por_codigo(codigo: str | None) -> str | None:
-    """Devuelve el transportista cuyo formato encaja con el código, si es unívoco."""
+def familias_que_encajan(codigo: str | None) -> list[str]:
+    """Todos los transportistas con cuyo formato encaja el código.
+
+    Devuelve la lista entera a propósito. Los rangos de longitud se solapan
+    mucho entre transportistas españoles —un código de 10 a 13 dígitos encaja
+    a la vez con SEUR, GLS, CTT, Correos Express, Boyacá o DHL—, así que saber
+    CUÁNTOS encajan distingue «no reconozco esto» de «no puedo decidir entre
+    varios». Son dos cosas distintas y antes se avisaba igual de las dos.
+    """
     limpio = normalizar_codigo(codigo)
     if not limpio:
-        return None
-    candidatos = [
+        return []
+    return [
         nombre
         for nombre, patrones in PATRONES_TRANSPORTISTA.items()
         if any(p.match(limpio) for p in patrones)
     ]
+
+
+def detectar_transportista_por_codigo(codigo: str | None) -> str | None:
+    """Devuelve el transportista cuyo formato encaja con el código, si es unívoco."""
+    candidatos = familias_que_encajan(codigo)
     return candidatos[0] if len(candidatos) == 1 else None
 
 
@@ -190,18 +202,30 @@ def validar_codigo_seguimiento(
             return resultado
         resultado.verificado_en_fuente = True
 
-    detectado = detectar_transportista_por_codigo(limpio)
-    if detectado and not resultado.transportista:
-        resultado.transportista = detectado
-    elif detectado and resultado.transportista and detectado != resultado.transportista:
-        resultado.avisos.append(
-            f"el formato del código parece de {detectado}, no de {resultado.transportista}"
-        )
+    # Capa 3: ¿tiene forma de código de un transportista real? Solo se usa como
+    # respaldo cuando NO hemos podido verificarlo contra el texto del documento.
+    candidatos = familias_que_encajan(limpio)
+    declarado = resultado.transportista
 
-    if not resultado.verificado_en_fuente and detectado is None:
+    if declarado and declarado in candidatos:
+        pass  # el formato respalda lo que dice la etiqueta: nada que avisar
+    elif candidatos and declarado:
         resultado.avisos.append(
-            "código sin verificar: formato no reconocido, compruébalo a mano"
+            f"el formato del código parece de {' o '.join(candidatos)}, no de {declarado}"
         )
+    elif len(candidatos) == 1:
+        resultado.transportista = candidatos[0]
+    elif not resultado.verificado_en_fuente:
+        if candidatos:
+            # Ambiguo, no desconocido: decirlo ayuda a decidir a quién preguntar.
+            resultado.avisos.append(
+                "código sin verificar: el formato encaja con varios transportistas "
+                f"({', '.join(candidatos)}), compruébalo a mano"
+            )
+        else:
+            resultado.avisos.append(
+                "código sin verificar: formato no reconocido, compruébalo a mano"
+            )
 
     resultado.codigo_seguimiento = codigo.strip() if codigo else None
     return resultado

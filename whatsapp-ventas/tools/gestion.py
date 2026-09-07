@@ -132,32 +132,88 @@ def cmd_grupos(ajustes, args) -> None:
     print("\nCopia el JID que acaba en @g.us en GRUPO_VENTAS_JID del .env y reinicia el bot.")
 
 
-def cmd_webhook(ajustes, args) -> None:
-    url = args.url or f"{args.base}/webhook/{ajustes.webhook_token}"
-    eventos = ["MESSAGES_UPSERT"]
-    moderno = {
-        "webhook": {
+def cuerpos_webhook(url, eventos=None):
+    """Los tres formatos de `webhook/set` que hay sueltos por ahi, en orden.
+
+    Evolution ha cambiado la forma del cuerpo dos veces y cada despliegue puede
+    estar en cualquiera de las tres. Importa que esten las tres y el orden,
+    porque la clave que enciende el base64 se llama distinto en cada una
+    (`base64`, `webhookBase64`, `webhook_base64`): si se cuela el formato que
+    no toca, el gateway puede aceptar el cuerpo y dejar el base64 apagado, y
+    entonces cada adjunto cuesta una llamada extra al gateway.
+
+    - anidado:   v2.1+, el que documenta el OpenAPI actual.
+    - camelCase: el de la referencia de la API v2 (plano). Faltaba.
+    - snake:     v2.0 y la configuracion por instancia.
+    """
+    eventos = eventos or ["MESSAGES_UPSERT"]
+    return [
+        ("anidado (v2.1+)", {
+            "webhook": {
+                "enabled": True,
+                "url": url,
+                "byEvents": False,
+                "base64": True,
+                "events": eventos,
+            }
+        }),
+        ("camelCase plano", {
             "enabled": True,
             "url": url,
-            "byEvents": False,
-            "base64": True,
+            "webhookByEvents": False,
+            "webhookBase64": True,
             "events": eventos,
-        }
-    }
-    antiguo = {
-        "enabled": True,
-        "url": url,
-        "webhook_by_events": False,
-        "webhook_base64": True,
-        "events": eventos,
-    }
+        }),
+        ("snake_case (v2.0)", {
+            "enabled": True,
+            "url": url,
+            "webhook_by_events": False,
+            "webhook_base64": True,
+            "events": eventos,
+        }),
+    ]
+
+
+def _base64_activo(config):
+    """Quedo el webhook con el base64 encendido? None = no se ha podido saber."""
+    if not isinstance(config, dict):
+        return None
+    bloque = config.get("webhook") if isinstance(config.get("webhook"), dict) else config
+    for clave in ("base64", "webhookBase64", "webhook_base64"):
+        if clave in bloque:
+            return bool(bloque[clave])
+    return None
+
+
+def cmd_webhook(ajustes, args) -> None:
+    url = args.url or f"{args.base}/webhook/{ajustes.webhook_token}"
     ruta = f"/webhook/set/{ajustes.evolution_instancia}"
     with _cliente(ajustes) as cliente:
-        respuesta = cliente.post(ruta, json=moderno)
-        if respuesta.status_code >= 400:
-            print(f"Formato moderno rechazado ({respuesta.status_code}); pruebo el antiguo.")
-            respuesta = cliente.post(ruta, json=antiguo)
+        respuesta = None
+        for nombre, cuerpo in cuerpos_webhook(url):
+            respuesta = cliente.post(ruta, json=cuerpo)
+            if respuesta.status_code < 400:
+                print(f"Aceptado con el formato {nombre}.")
+                break
+            print(f"Formato {nombre} rechazado ({respuesta.status_code}); pruebo el siguiente.")
         _mostrar(respuesta)
+
+        # No basta con que lo acepte: hay que releerlo. Un cuerpo con la clave
+        # equivocada puede devolver 200 y dejar el base64 apagado.
+        try:
+            comprobacion = cliente.get(f"/webhook/find/{ajustes.evolution_instancia}")
+            if comprobacion.status_code < 400:
+                activo = _base64_activo(comprobacion.json())
+                if activo is True:
+                    print("Comprobado: el gateway mandara el adjunto en base64.")
+                elif activo is False:
+                    print(
+                        "AVISO: el webhook quedo puesto pero SIN base64. El bot funcionara, "
+                        "pero pedira cada adjunto al gateway (mas lento y mas fragil)."
+                    )
+        except (httpx.HTTPError, ValueError):
+            pass  # la comprobacion es un extra; que falle no invalida el alta
+
     print(f"\nWebhook apuntando a: {url}")
 
 

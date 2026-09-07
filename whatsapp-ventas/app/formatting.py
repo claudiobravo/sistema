@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
+from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .models import RegistroVenta
+
+log = logging.getLogger(__name__)
 
 _ETIQUETAS_ESTADO = {
     "pendiente_envio": "⏳ pendiente de envío",
@@ -21,15 +25,35 @@ def formatear_precio(valor: float | None) -> str:
     return f"{valor:,.2f} €".replace(",", "@").replace(".", ",").replace("@", ".")
 
 
+@lru_cache(maxsize=8)
+def _zona_horaria(nombre: str) -> ZoneInfo | None:
+    """Resuelve la zona una sola vez y avisa (una sola vez) si no está.
+
+    Sin la base de datos de zonas, `astimezone` deja la hora en UTC y las
+    confirmaciones salen con dos horas de menos sin que nadie se entere. Como
+    esto se traga la excepción a propósito para no tirar el mensaje, el aviso
+    en el log es la única pista: por eso se registra. En Linux la base la trae
+    el sistema; en Windows viene del paquete `tzdata` de requirements.txt.
+    """
+    try:
+        return ZoneInfo(nombre)
+    except (ZoneInfoNotFoundError, ValueError):
+        log.warning(
+            "zona horaria %r no disponible: las horas saldrán en UTC. "
+            "¿Falta el paquete tzdata o /usr/share/zoneinfo?",
+            nombre,
+        )
+        return None
+
+
 def formatear_fecha(iso: str, zona: str = "Europe/Madrid") -> str:
     try:
         momento = datetime.fromisoformat(iso)
     except ValueError:
         return iso
-    try:
-        momento = momento.astimezone(ZoneInfo(zona))
-    except (ZoneInfoNotFoundError, ValueError):
-        pass
+    destino = _zona_horaria(zona)
+    if destino is not None:
+        momento = momento.astimezone(destino)
     return momento.strftime("%d/%m/%Y %H:%M")
 
 

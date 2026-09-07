@@ -33,7 +33,9 @@ usándose con normalidad.
 
 ## 1. Requisitos
 
-- Docker y Docker Compose v2.
+- Docker y Docker Compose v2 **en la máquina donde vaya a correr**. El bot es un
+  servicio permanente: si lo levantas en un portátil que se apaga, deja de
+  registrar ventas mientras esté apagado.
 - Una SIM secundaria con WhatsApp ya instalado y funcionando en un móvil.
 - Un grupo de WhatsApp con los administradores **y el número secundario dentro**.
 - Una clave de API del proveedor de IA (por defecto Anthropic) o un Ollama con
@@ -346,10 +348,12 @@ python -m venv venv && ./venv/bin/pip install -r requirements-dev.txt
 ./venv/bin/python -m pytest
 ```
 
-68 pruebas, todas sin red: dobles del gateway y del LLM, PDFs generados al vuelo.
-Cubren el blindaje por grupo, la idempotencia, las tres vías de extracción
-(texto/PDF/imagen), el descarte de códigos inventados, la fusión por tracking,
-los comandos y la autenticación del webhook.
+89 pruebas, todas sin red: dobles del gateway y del LLM, PDFs generados al vuelo.
+Cubren el blindaje por grupo (incluido que el JID vacío deja al bot sordo), la
+idempotencia, las tres vías de extracción (texto/PDF/imagen), el descarte de
+códigos inventados, la fusión por tracking, los comandos, la autenticación del
+webhook, el rescate del base64 en mensajes envueltos y los tres formatos de
+`webhook/set`.
 
 ## 11. Seguridad
 
@@ -373,3 +377,33 @@ los comandos y la autenticación del webhook.
   las webs de los transportistas.
 - WhatsApp Business API oficial no está soportada; esto usa la vía de dispositivo
   vinculado, que es lo que permite un número normal.
+
+## 13. Qué está verificado y qué no (07/09/2026)
+
+Distinción importante antes de fiarse de nada de lo de arriba.
+
+**Verificado sin red:** 89 pruebas en verde (`python -m pytest`), el YAML del
+compose bien formado, y el arranque real del backend con uvicorn (webhook,
+token y trabajador en segundo plano).
+
+**Sin verificar nunca:** todo lo que toca WhatsApp o Evolution de verdad. Ni una
+sola etiqueta real ha pasado por aquí. En concreto, siguen sin calibrar con
+material real:
+
+- Los patrones de `app/validacion.py`. Son heurísticas escritas sin etiquetas
+  delante y **los rangos se solapan**: un código de 10 a 13 dígitos encaja a la
+  vez con SEUR, GLS, CTT, Correos Express, Boyacá o DHL, así que la capa 3 no
+  puede decidir sola y pide comprobación a mano. Eso no es un fallo —es el lado
+  seguro—, pero con etiquetas reales delante conviene afinar los rangos para que
+  el aviso deje de saltar siempre. Un aviso que salta siempre deja de leerse.
+- `PDF_MIN_CARACTERES=80`, el umbral que decide si un PDF va por texto o por
+  visión. Nunca se ha probado contra una etiqueta escaneada de verdad.
+- La forma exacta del payload del webhook de tu Evolution. `_extraer_base64`
+  mira ahora todas las capas del mensaje, pero si aun así el bot acaba pidiendo
+  cada adjunto por `getBase64FromMediaMessage`, arranca con `LOG_LEVEL=DEBUG`,
+  mira el payload crudo y añade la ruta que falte.
+
+Al montarlo por primera vez, el paso 5 (`tools.gestion webhook`) prueba tres
+formatos de cuerpo distintos y luego **relee la configuración** para confirmar
+que el base64 quedó encendido: un cuerpo con la clave equivocada puede devolver
+200 y dejarlo apagado.
