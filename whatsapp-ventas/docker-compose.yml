@@ -1,0 +1,110 @@
+# Pila completa: gateway de WhatsApp + backend de extracción.
+#
+#   docker compose up -d
+#   docker compose exec bot python -m tools.gestion crear     # QR
+#   docker compose exec bot python -m tools.gestion grupos    # group_jid
+#
+# Nada se publica en 0.0.0.0: el gateway y el backend solo escuchan en
+# localhost del servidor. Si necesitas llegar desde fuera, mete un proxy
+# inverso con TLS delante, no cambies estos puertos.
+
+name: whatsapp-ventas
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en el .env}
+      POSTGRES_DB: evolution
+    volumes:
+      - postgres_datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [interna]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_datos:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [interna]
+
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SERVER_URL: http://evolution-api:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?define EVOLUTION_API_KEY en el .env}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      DEL_INSTANCE: "false"
+      LANGUAGE: es
+      LOG_LEVEL: ERROR
+      LOG_COLOR: "false"
+      QRCODE_LIMIT: "30"
+
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+
+      # El webhook se configura por instancia desde `tools.gestion webhook`,
+      # que es lo que permite blindarlo con un token en la URL.
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    volumes:
+      - evolution_instancias:/evolution/instances
+    networks: [interna]
+
+  bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - evolution-api
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      EVOLUTION_BASE_URL: http://evolution-api:8080
+      DB_PATH: /datos/ventas.db
+    volumes:
+      - ./datos:/datos
+    networks: [interna]
+
+volumes:
+  postgres_datos:
+  redis_datos:
+  evolution_instancias:
+
+networks:
+  interna:
+    driver: bridge

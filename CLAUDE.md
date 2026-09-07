@@ -35,3 +35,12 @@ registro de lo que se probó, sin publicar:
 
 De todo eso, lo único que se llevó a GLIVO fueron dos fechas límite que allí
 faltaban: el **cierre de AGAUR del 28/09** y la **salida de España del 15/01/2027**.
+
+## Qué hay en `whatsapp-ventas/`
+
+Un proyecto **aparte**, del 07/09/2026: un bot self-hosted que registra las
+ventas de Vinted y Wallapop desde un grupo de WhatsApp (gateway en Docker,
+backend FastAPI, extracción con LLM, SQLite). No es El Sistema ni una función de
+la PWA retirada; está aquí solo por comodidad y es autocontenido, así que se
+puede mover a su propio repo sin tocar nada. Su documentación está en
+`whatsapp-ventas/README.md`.
