@@ -121,16 +121,18 @@ def test_un_rechazo_del_modelo_se_convierte_en_error_de_llm(ajustes):
         proveedor.extraer(EntradaExtraccion(instruccion="extrae", texto="hola"))
 
 
-def test_el_modelo_de_gemini_por_defecto_no_es_uno_retirado():
-    """gemini-2.0-flash estaba por defecto y Google ya lo ha retirado.
+def test_el_modelo_de_gemini_por_defecto_es_uno_que_se_ha_probado():
+    """Tres modelos cayeron antes de este, y cada uno fallaba distinto.
 
-    Falla con 404 en cada mensaje, y como el error salta dentro del contenedor
-    solo se ve en el grupo. Este test no comprueba la red: fija el valor para
-    que cambiarlo sin querer salte aqui y no en produccion.
+    2.0 esta retirado; 2.5 aparece en el listado y responde a claves viejas
+    pero da 404 a una clave nueva ("no longer available to new users"); 3.6,
+    el que recomienda el propio Google, devuelve 503. Solo 3.5 respondio por
+    texto y por PDF. Este test no toca la red: fija el valor para que cambiarlo
+    sin querer salte aqui y no en el grupo de WhatsApp.
     """
     from app.config import Ajustes
 
     ajustes = Ajustes(_env_file=None)
-    assert ajustes.gemini_modelo == "gemini-2.5-flash"
+    assert ajustes.gemini_modelo == "gemini-3.5-flash"
     # Un alias se mueve solo de modelo: eso es justo lo que no queremos.
     assert not ajustes.gemini_modelo.endswith("-latest")
