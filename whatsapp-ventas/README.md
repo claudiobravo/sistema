@@ -348,12 +348,13 @@ python -m venv venv && ./venv/bin/pip install -r requirements-dev.txt
 ./venv/bin/python -m pytest
 ```
 
-89 pruebas, todas sin red: dobles del gateway y del LLM, PDFs generados al vuelo.
+101 pruebas, todas sin red: dobles del gateway y del LLM, PDFs generados al vuelo.
 Cubren el blindaje por grupo (incluido que el JID vacío deja al bot sordo), la
 idempotencia, las tres vías de extracción (texto/PDF/imagen), el descarte de
 códigos inventados, la fusión por tracking, los comandos, la autenticación del
 webhook, el rescate del base64 en mensajes envueltos y los tres formatos de
-`webhook/set`.
+`webhook/set`, y el puente con Glivo (la funcion que escribe se inyecta,
+asi que ninguna prueba toca la base de nadie).
 
 ## 11. Seguridad
 
@@ -377,6 +378,44 @@ webhook, el rescate del base64 en mensajes envueltos y los tres formatos de
   las webs de los transportistas.
 - WhatsApp Business API oficial no está soportada; esto usa la vía de dispositivo
   vinculado, que es lo que permite un número normal.
+
+## 12b. Enganche con Glivo (el bot de Telegram)
+
+Claudio ya registraba ventas por Telegram escribiendo `Registro: ...`, y eso
+va a la tabla `eventos_diarios` de `/home/claudio/glivo/glivo_memory.db`, que
+es lo que leen el panel de El Sistema y `experto_vinted.py`. Si este bot se
+quedara solo con su `ventas.db` habría **dos contabilidades**, y el experto de
+Vinted analizaría la mitad de las ventas.
+
+`tools/puente_glivo.py` lo arregla: lee las ventas del bot por su API y las
+apunta en Glivo con `registro_diario.guardar_evento()`.
+
+```bash
+# ver qué haría, sin escribir nada
+cd /home/claudio/glivo && ./.venv/bin/python   /home/claudio/sistema/whatsapp-ventas/tools/puente_glivo.py --simular
+
+# apuntarlas de verdad
+cd /home/claudio/glivo && ./.venv/bin/python   /home/claudio/sistema/whatsapp-ventas/tools/puente_glivo.py
+```
+
+Decisiones que conviene conocer antes de tocarlo:
+
+- **Corre en el host, no en el contenedor**, porque `registro_diario` vive en
+  el entorno de Glivo. No modifica ni un fichero de Glivo: solo llama a su
+  función pública.
+- **Lee por HTTP, no abriendo `ventas.db`.** La base es del uid 10001 y el
+  puente corre como `claudio`: al abrirla salta
+  `attempt to write a readonly database` incluso en un SELECT, porque una base
+  en WAL necesita sus ficheros auxiliares hasta para leer.
+- **Las ventas sin precio no se apuntan.** Un evento de venta sin importe abre
+  una `venta_pendiente` en Glivo y te pregunta el importe por Telegram — justo
+  el trabajo manual que el bot viene a quitar. Entran cuando llega el precio.
+- **Comprueba el `-1`.** `guardar_evento()` falla en silencio devolviendo -1;
+  si eso pasa, la venta no se marca y se reintenta en la pasada siguiente.
+- **No duplica**: los ids ya apuntados se guardan en `datos/puente_glivo.json`.
+  Cada apunte lleva `[bot ventas #<id>]` al final del texto, para reconocerlos.
+
+Para deshacerlo: borra el script y `datos/puente_glivo.json`.
 
 ## 13. Qué está verificado y qué no (07/09/2026)
 
